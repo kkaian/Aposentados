@@ -25,3 +25,5 @@ export const TIMEZONE = 'America/Sao_Paulo'
 // Supabase Auth exige e-mail: cada usuário recebe um e-mail interno derivado do nome de usuário
 export const AUTH_EMAIL_DOMAIN = 'aposentados.app'
 export const usernameToEmail = (username) => `${username.trim().toLowerCase()}@${AUTH_EMAIL_DOMAIN}`
+
+export const USERNAME_RE = /^[a-z0-9._]{3,20}$/

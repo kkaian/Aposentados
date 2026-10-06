@@ -17,7 +17,9 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { isAdminRole, useAuth } from '../lib/auth'
 import { useInstallPrompt } from '../lib/install'
+import { photoUrl } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 import Avatar from './Avatar'
 import InstallSheet from './InstallSheet'
@@ -46,7 +48,19 @@ const ADMIN_MENU = [
   { to: '/admin/diarista', label: 'Adicionar diarista', icon: UserPlus },
 ]
 
-const TITLES = Object.fromEntries([...MENU, ...ADMIN_MENU].map((m) => [m.to, m.label]))
+const TITLES = {
+  ...Object.fromEntries([...MENU, ...ADMIN_MENU].map((m) => [m.to, m.label])),
+  '/presenca': 'Presença',
+  '/admin/cadastros': 'Cadastros',
+  '/admin/permissoes': 'Permissões',
+  '/admin/mensalistas': 'Mensalistas',
+  '/admin/peladas': 'Peladas',
+  '/admin/kits': 'Nomes e escudos',
+  '/admin/exportar': 'Exportar dados',
+}
+
+const titleFor = (pathname) =>
+  pathname === '/' ? 'Aposentados FC' : (TITLES[pathname] ?? (pathname.startsWith('/jogador/') ? 'Jogador' : 'Aposentados FC'))
 
 const itemClass = 'flex h-12 w-full items-center gap-3 rounded-lg px-3 text-left transition-colors active:bg-surface-2'
 
@@ -64,11 +78,11 @@ function MenuItem({ to, label, icon: Icon, onClick }) {
   )
 }
 
-// TODO(fase 1): vir do perfil logado (profiles.role)
-const isAdmin = true
-const playerName = 'Jogador'
+const ROLE_LABEL = { dono: 'Dono', admin: 'Admin', jogador: 'Jogador' }
 
 export default function Layout() {
+  const { profile } = useAuth()
+  const isAdmin = isAdminRole(profile)
   const [menuOpen, setMenuOpen] = useState(false)
   const [installOpen, setInstallOpen] = useState(false)
   const { installed } = useInstallPrompt()
@@ -86,9 +100,9 @@ export default function Layout() {
           <Menu size={24} />
         </button>
         <Shield />
-        <b className="flex-1 truncate text-xl">{pathname === '/' ? 'Aposentados FC' : (TITLES[pathname] ?? 'Aposentados FC')}</b>
+        <b className="flex-1 truncate text-xl">{titleFor(pathname)}</b>
         <NavLink to="/perfil" aria-label="Meu perfil">
-          <Avatar name={playerName} size={36} />
+          <Avatar name={profile.name} src={photoUrl(profile.photo_path)} size={36} />
         </NavLink>
       </header>
 
@@ -126,10 +140,12 @@ export default function Layout() {
               <b className="text-lg">Aposentados FC</b>
             </div>
             <NavLink to="/perfil" onClick={close} className="mx-2 mt-2 flex items-center gap-3 rounded-lg p-2 active:bg-surface-2">
-              <Avatar name={playerName} size={40} />
+              <Avatar name={profile.name} src={photoUrl(profile.photo_path)} size={40} />
               <div className="flex-1">
-                <div className="font-semibold">{playerName}</div>
-                <div className="text-xs text-muted">{isAdmin ? 'Admin' : 'Jogador'}</div>
+                <div className="truncate font-semibold">{profile.name}</div>
+                <div className="text-xs text-muted">
+                  {ROLE_LABEL[profile.role]} · {profile.type}
+                </div>
               </div>
               <ChevronRight size={18} className="text-muted" />
             </NavLink>
