@@ -1,11 +1,11 @@
-import { Copy, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import Avatar from '../components/Avatar'
 import HolderSelect from '../components/HolderSelect'
 import Sheet from '../components/Sheet'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
-import { monthName, todayISO } from '../lib/dates'
+import { addMonths, monthLabel, monthName, monthStart, todayISO } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
 import { useHolders } from '../lib/holders'
 import { photoUrl } from '../lib/storage'
@@ -25,21 +25,24 @@ function StatusPill({ status, late }) {
   return <span className={`rounded-full border px-2 py-0.5 text-xs whitespace-nowrap ${cls}`}>{label}</span>
 }
 
+const chargeTitle = (c) => (c.kind === 'mensalidade' ? `Mensalidade de ${monthLabel(c.month).toLowerCase()}` : c.title)
+
 export default function Pagamentos() {
   const { profile } = useAuth()
   const isAdmin = isAdminRole(profile)
+  const holders = useHolders()
   const [data, setData] = useState()
   const [msg, setMsg] = useState({})
   const [busy, setBusy] = useState(null)
   const [sheet, setSheet] = useState(null)
   const [confirmFor, setConfirmFor] = useState(null)
-  const holders = useHolders()
+  const [showPaid, setShowPaid] = useState(false)
 
   const load = useCallback(async () => {
     await supabase.rpc('ensure_current_fee')
     const [{ data: settings }, { data: charges }, { data: payments }, { data: players }] = await Promise.all([
       supabase.from('app_settings').select('*').single(),
-      supabase.from('charges').select('*').order('created_at', { ascending: false }).limit(30),
+      supabase.from('charges').select('*').order('created_at', { ascending: false }).limit(60),
       supabase.from('payments').select('*'),
       supabase.from('profiles').select('id, name, photo_path, type').eq('status', 'ativo').order('name'),
     ])
@@ -66,15 +69,25 @@ export default function Pagamentos() {
 
   const { settings, charges, payments, players } = data
   const today = todayISO()
-  const statusOf = (chargeId, profileId) => payments.find((p) => p.charge_id === chargeId && p.profile_id === profileId)?.status ?? 'pendente'
-  const fee = charges.find((c) => c.kind === 'mensalidade' && c.month === `${today.slice(0, 7)}-01`)
-  const cotinhas = charges.filter((c) => c.kind === 'cotinha')
-  const mensalistas = players.filter((p) => p.type === 'mensalista')
-  const isLate = (charge, status) => status !== 'confirmado' && charge.due_date && charge.due_date < today
-  const owes = profile.type === 'mensalista'
-  const pending = payments.filter((p) => p.status === 'informado')
+  const thisMonth = monthStart(today)
   const chargeById = Object.fromEntries(charges.map((c) => [c.id, c]))
   const playerById = Object.fromEntries(players.map((p) => [p.id, p]))
+  const isLate = (charge, status) => status !== 'confirmado' && charge.due_date && charge.due_date < today
+
+  // as cobranças do jogador: em aberto primeiro (atrasadas, do mês, adiantadas), depois o histórico pago
+  const mine = payments
+    .filter((p) => p.profile_id === profile.id && chargeById[p.charge_id])
+    .map((p) => ({ ...p, charge: chargeById[p.charge_id] }))
+    .sort((a, b) => (a.charge.due_date ?? '9999').localeCompare(b.charge.due_date ?? '9999'))
+  const open = mine.filter((p) => p.status !== 'confirmado')
+  const paid = mine.filter((p) => p.status === 'confirmado').reverse()
+
+  const fees = charges.filter((c) => c.kind === 'mensalidade').sort((a, b) => b.month.localeCompare(a.month))
+  const cotinhas = charges.filter((c) => c.kind === 'cotinha')
+  const nextMonth = addMonths(thisMonth, 1)
+  const hasNext = fees.some((c) => c.month === nextMonth)
+  const pending = payments.filter((p) => p.status === 'informado')
+  const billed = (chargeId) => payments.filter((p) => p.charge_id === chargeId)
 
   async function copyPix() {
     try {
@@ -85,70 +98,58 @@ export default function Pagamentos() {
     }
   }
 
-  function payRow(c) {
-    const st = statusOf(c.id, profile.id)
-    return (
-      <div key={c.id} className="flex min-h-14 items-center gap-3 border-b border-row px-4 py-2">
-        <div className="min-w-0 flex-1">
-          <div className="truncate">{c.title}</div>
-          <div className="text-xs text-muted">
-            {money(c.amount)}
-            {c.due_date && ` · vence ${dateBR(c.due_date)}`}
-          </div>
-        </div>
-        <StatusPill status={st} late={isLate(c, st)} />
-        {st === 'pendente' && (
-          <button className="btn h-9 px-3 text-sm" disabled={busy === c.id} onClick={() => run(c.id, 'inform_payment', { p_charge: c.id }, 'Avisamos o admin. Ele confirma quando receber.')}>
-            Já paguei
-          </button>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div className="pb-6">
-      {owes && fee ? (
-        <div className="card mx-4 mt-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted">Mensalidade de {monthName(fee.month)}</span>
-            <StatusPill status={statusOf(fee.id, profile.id)} late={isLate(fee, statusOf(fee.id, profile.id))} />
-          </div>
-          <div className="mt-1 text-3xl font-bold">{money(fee.amount)}</div>
-          <div className="text-xs text-muted">Vence em {dateBR(fee.due_date)}</div>
-          {settings.pix_key ? (
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-line-2 p-2">
-              <span className="min-w-0 flex-1 truncate text-sm select-all">Pix: {settings.pix_key}</span>
-              <button className="flex h-9 items-center gap-1 px-2 text-sm font-semibold text-action" onClick={copyPix}>
-                <Copy size={15} /> Copiar
-              </button>
+      {settings.pix_key && open.length > 0 && (
+        <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-line-2 p-3">
+          <span className="min-w-0 flex-1 truncate text-sm select-all">Pix: {settings.pix_key}</span>
+          <button className="flex h-9 items-center gap-1 px-2 text-sm font-semibold text-action" onClick={copyPix}>
+            <Copy size={15} /> Copiar
+          </button>
+        </div>
+      )}
+
+      <SectionLabel>Minhas cobranças em aberto · {open.length}</SectionLabel>
+      {open.length === 0 && (
+        <div className="px-4 text-sm text-muted">{profile.type === 'mensalista' ? 'Tudo pago. Valeu!' : 'Nada a pagar. Mensalidade é só para mensalistas.'}</div>
+      )}
+      {open.map((p) => (
+        <div key={p.charge_id} className="flex min-h-16 items-center gap-3 border-b border-row px-4 py-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate">{chargeTitle(p.charge)}</div>
+            <div className="text-xs text-muted">
+              {money(p.charge.amount)}
+              {p.charge.due_date && ` · vence ${dateBR(p.charge.due_date)}`}
             </div>
-          ) : (
-            <div className="mt-3 text-xs text-muted">O admin ainda não cadastrou a chave Pix.</div>
-          )}
-          {statusOf(fee.id, profile.id) === 'pendente' && (
-            <button className="btn mt-3 w-full" disabled={busy === fee.id} onClick={() => run(fee.id, 'inform_payment', { p_charge: fee.id }, 'Avisamos o admin. Ele confirma quando receber.')}>
+          </div>
+          <StatusPill status={p.status} late={isLate(p.charge, p.status)} />
+          {p.status === 'pendente' && (
+            <button className="btn h-9 px-3 text-sm" disabled={busy === p.charge_id} onClick={() => run(p.charge_id, 'inform_payment', { p_charge: p.charge_id }, 'Avisamos o admin. Ele confirma quando receber.')}>
               Já paguei
             </button>
           )}
-          <div className="mt-2 text-xs text-muted">Depois de pagar, um admin confirma o recebimento.</div>
         </div>
-      ) : (
-        <div className="card mx-4 mt-3 text-sm text-muted">
-          {owes ? 'A mensalidade deste mês ainda não foi configurada pelo admin.' : 'Mensalidade é só para mensalistas.'}
-        </div>
-      )}
+      ))}
+      {open.length > 0 && <p className="px-4 pt-2 text-xs text-muted">Depois de pagar o Pix, toque em "Já paguei". Um admin confirma o recebimento.</p>}
 
       <div className="space-y-2 px-4 pt-3">
         <Notice>{msg.error}</Notice>
         <Notice kind="ok">{msg.ok}</Notice>
       </div>
 
-      {owes && (
+      {paid.length > 0 && (
         <>
-          <SectionLabel>Cotinhas</SectionLabel>
-          {cotinhas.length === 0 && <div className="px-4 text-sm text-muted">Nenhuma cotinha.</div>}
-          {cotinhas.map(payRow)}
+          <button className="flex w-full items-center gap-1 px-4 pt-4 pb-2 text-xs font-semibold tracking-wide text-muted uppercase" onClick={() => setShowPaid((v) => !v)}>
+            {showPaid ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Já pagas · {paid.length}
+          </button>
+          {showPaid &&
+            paid.map((p) => (
+              <div key={p.charge_id} className="flex min-h-12 items-center gap-3 border-b border-row px-4">
+                <span className="min-w-0 flex-1 truncate text-sm">{chargeTitle(p.charge)}</span>
+                <span className="text-xs text-muted">{money(p.charge.amount)}</span>
+                <StatusPill status="confirmado" />
+              </div>
+            ))}
         </>
       )}
 
@@ -161,9 +162,7 @@ export default function Pagamentos() {
               <Avatar name={playerById[p.profile_id]?.name ?? ''} src={photoUrl(playerById[p.profile_id]?.photo_path)} />
               <div className="min-w-0 flex-1">
                 <div className="truncate">{playerById[p.profile_id]?.name}</div>
-                <div className="text-xs text-muted">
-                  {chargeById[p.charge_id]?.kind === 'mensalidade' ? `Mensalidade de ${monthName(chargeById[p.charge_id].month)}` : chargeById[p.charge_id]?.title}
-                </div>
+                <div className="text-xs text-muted">{chargeById[p.charge_id] && chargeTitle(chargeById[p.charge_id])}</div>
               </div>
               <button className="btn h-9 px-3 text-sm" disabled={busy !== null} onClick={() => setConfirmFor({ charge: chargeById[p.charge_id], profile: playerById[p.profile_id], holder: profile.id })}>
                 Confirmar
@@ -171,66 +170,107 @@ export default function Pagamentos() {
             </div>
           ))}
 
-          <div className="flex gap-2 px-4 pt-3">
-            {fee && (
-              <button className="btn-ghost flex-1 text-sm" onClick={() => setSheet({ kind: 'quem', charge: fee })}>
-                Ver quem está em dia
-              </button>
-            )}
-            <button className="btn-ghost flex flex-1 items-center justify-center gap-1 text-sm" onClick={() => setSheet({ kind: 'cotinha' })}>
-              <Plus size={16} /> Nova cotinha
-            </button>
+          <div className="flex items-center justify-between pr-4">
+            <SectionLabel>Só admin · mensalidades</SectionLabel>
           </div>
-          {cotinhas.length > 0 && (
-            <div className="flex flex-wrap gap-2 px-4 pt-2">
-              {cotinhas.map((c) => (
-                <button key={c.id} className="h-9 rounded-full border border-line-2 px-3 text-xs" onClick={() => setSheet({ kind: 'quem', charge: c })}>
-                  Quem pagou: {c.title}
-                </button>
-              ))}
+          {!hasNext && (
+            <div className="px-4 pb-2">
+              <button
+                className="btn-outline flex w-full items-center justify-center gap-2"
+                disabled={busy === 'next'}
+                onClick={() => run('next', 'create_month_fee', { p_month: nextMonth }, `Mensalidade de ${monthName(nextMonth)} criada para os mensalistas.`)}
+              >
+                <Plus size={16} /> Criar mensalidade de {monthName(nextMonth)}
+              </button>
+              <p className="mt-1 text-xs text-muted">Cobra os mensalistas de agora (quem virar mensalista depois entra também). Vence dia {settings.fee_due_day}.</p>
             </div>
           )}
+          {fees.length === 0 && <div className="px-4 text-sm text-muted">Defina o valor da mensalidade em Mensalistas e cota.</div>}
+          {fees.map((c) => {
+            const list = billed(c.id)
+            const ok = list.filter((p) => p.status === 'confirmado').length
+            return (
+              <button key={c.id} className="flex min-h-14 w-full items-center gap-3 border-b border-row px-4 text-left" onClick={() => setSheet({ kind: 'quem', charge: c })}>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate">{monthLabel(c.month)}</div>
+                  <div className="text-xs text-muted">
+                    {money(c.amount)} · vence {dateBR(c.due_date)}
+                  </div>
+                </div>
+                <span className={`text-sm font-semibold ${ok === list.length && list.length ? 'text-[#7FD3A4]' : 'text-muted'}`}>
+                  {ok} de {list.length} pagos
+                </span>
+                <ChevronRight size={16} className="text-muted" />
+              </button>
+            )
+          })}
+
+          <div className="flex items-center justify-between pr-4">
+            <SectionLabel>Só admin · cotinhas</SectionLabel>
+            <button className="flex items-center gap-1 text-xs font-semibold text-action" onClick={() => setSheet({ kind: 'cotinha' })}>
+              <Plus size={14} /> Nova cotinha
+            </button>
+          </div>
+          {cotinhas.length === 0 && <div className="px-4 text-sm text-muted">Nenhuma cotinha.</div>}
+          {cotinhas.map((c) => {
+            const list = billed(c.id)
+            return (
+              <button key={c.id} className="flex min-h-14 w-full items-center gap-3 border-b border-row px-4 text-left" onClick={() => setSheet({ kind: 'quem', charge: c })}>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate">{c.title}</div>
+                  <div className="text-xs text-muted">{money(c.amount)}</div>
+                </div>
+                <span className="text-sm text-muted">
+                  {list.filter((p) => p.status === 'confirmado').length} de {list.length} pagos
+                </span>
+                <ChevronRight size={16} className="text-muted" />
+              </button>
+            )
+          })}
           <PixForm settings={settings} onSaved={load} />
         </>
       )}
 
       {sheet?.kind === 'quem' && (
         <Sheet
-          title={sheet.charge.kind === 'mensalidade' ? `Mensalidade de ${monthName(sheet.charge.month)}` : sheet.charge.title}
-          subtitle={`${mensalistas.filter((m) => statusOf(sheet.charge.id, m.id) === 'confirmado').length} de ${mensalistas.length} pagos`}
+          title={chargeTitle(sheet.charge)}
+          subtitle={`${billed(sheet.charge.id).filter((p) => p.status === 'confirmado').length} de ${billed(sheet.charge.id).length} pagos · ${money(sheet.charge.amount)}`}
           onClose={() => setSheet(null)}
         >
-          {mensalistas.map((m) => {
-            const st = statusOf(sheet.charge.id, m.id)
-            return (
-              <div key={m.id} className="flex min-h-12 items-center gap-3 border-b border-row">
-                <span className="flex-1">{m.name}</span>
-                <StatusPill status={st} late={isLate(sheet.charge, st)} />
-                {st !== 'confirmado' ? (
-                  <button className="h-9 px-2 text-sm font-semibold text-action" onClick={() => setConfirmFor({ charge: sheet.charge, profile: m, holder: profile.id })}>
-                    Confirmar
-                  </button>
+          {billed(sheet.charge.id)
+            .map((p) => ({ ...p, player: playerById[p.profile_id] ?? { name: 'Jogador inativo', id: p.profile_id } }))
+            .sort((a, b) => a.player.name.localeCompare(b.player.name))
+            .map((p) => (
+              <div key={p.profile_id} className="flex min-h-12 items-center gap-2 border-b border-row">
+                <span className="min-w-0 flex-1 truncate">{p.player.name}</span>
+                <StatusPill status={p.status} late={isLate(sheet.charge, p.status)} />
+                {p.status !== 'confirmado' ? (
+                  <>
+                    <button className="h-9 px-2 text-sm font-semibold text-action" onClick={() => setConfirmFor({ charge: sheet.charge, profile: p.player, holder: profile.id })}>
+                      Confirmar
+                    </button>
+                    <button className="h-9 px-1 text-xs text-muted" onClick={() => run(`d${p.profile_id}`, 'dismiss_payment', { p_charge: sheet.charge.id, p_profile: p.profile_id }, `${p.player.name} dispensado desta cobrança.`)}>
+                      Dispensar
+                    </button>
+                  </>
                 ) : (
                   <button
                     className="h-9 px-2 text-sm text-muted"
-                    onClick={() => run(`u${m.id}`, 'unconfirm_payment', { p_charge: sheet.charge.id, p_profile: m.id, p_reason: 'Confirmação desfeita' }, `Pagamento de ${m.name} voltou para pendente.`)}
+                    onClick={() => run(`u${p.profile_id}`, 'unconfirm_payment', { p_charge: sheet.charge.id, p_profile: p.profile_id, p_reason: 'Confirmação desfeita' }, `Pagamento de ${p.player.name} voltou para pendente.`)}
                   >
                     Desfazer
                   </button>
                 )}
               </div>
-            )
-          })}
+            ))}
+          <p className="mt-2 text-xs text-muted">Dispensar tira a pessoa desta cobrança (ex.: entrou no fim do mês). Desfazer volta um pagamento confirmado por engano.</p>
         </Sheet>
       )}
+
       {sheet?.kind === 'cotinha' && <CotinhaSheet onClose={() => setSheet(null)} onSaved={load} />}
 
       {confirmFor && (
-        <Sheet
-          title={`Confirmar pagamento de ${confirmFor.profile?.name}`}
-          subtitle={`${confirmFor.charge.kind === 'mensalidade' ? `Mensalidade de ${monthName(confirmFor.charge.month)}` : confirmFor.charge.title} · ${money(confirmFor.charge.amount)}. Entra no caixa.`}
-          onClose={() => setConfirmFor(null)}
-        >
+        <Sheet title={`Confirmar pagamento de ${confirmFor.profile?.name}`} subtitle={`${chargeTitle(confirmFor.charge)} · ${money(confirmFor.charge.amount)}. Entra no caixa.`} onClose={() => setConfirmFor(null)}>
           <HolderSelect holders={holders} value={confirmFor.holder} onChange={(h) => setConfirmFor((c) => ({ ...c, holder: h }))} label="Quem recebeu o dinheiro" />
           <button
             className="btn mt-3 w-full"
@@ -246,7 +286,6 @@ export default function Pagamentos() {
           <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setConfirmFor(null)}>
             Cancelar
           </button>
-          <p className="text-xs text-muted">Apertou errado? Em "Ver quem está em dia", toque em Desfazer.</p>
         </Sheet>
       )}
     </div>
@@ -268,7 +307,7 @@ function CotinhaSheet({ onClose, onSaved }) {
   }
 
   return (
-    <Sheet title="Nova cotinha" subtitle="Vale para todos os mensalistas, com pagamento próprio." onClose={onClose}>
+    <Sheet title="Nova cotinha" subtitle="Cobra todos os mensalistas de agora, com pagamento próprio." onClose={onClose}>
       <label className="label" htmlFor="ct">O que é</label>
       <input id="ct" className="field" placeholder="Ex.: bola nova" maxLength={40} value={form.title} onChange={set('title')} />
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -308,10 +347,15 @@ function PixForm({ settings, onSaved }) {
     <div className="card mx-4 mt-4">
       <label className="label" htmlFor="pix">Chave Pix que aparece para os jogadores</label>
       <div className="flex gap-2">
-        <input id="pix" className="field" value={pix} onChange={(e) => {
+        <input
+          id="pix"
+          className="field"
+          value={pix}
+          onChange={(e) => {
             setPix(e.target.value)
             setSaved(false)
-          }} />
+          }}
+        />
         <button className="btn" onClick={save}>
           {saved ? 'Salvo' : 'Salvar'}
         </button>

@@ -130,6 +130,36 @@ try {
     return (await one(`select status from payments where charge_id = $1 and profile_id = $2`, [charge, id('j3')])).status
   })
 
+  await expect('admin cria a mensalidade do mês seguinte quando quiser', async () => {
+    await as(id('adm'))
+    const next = (await one(`select (current_month() + interval '1 month')::date::text m`)).m
+    await q(`select create_month_fee($1)`, [next])
+    const r = await one(`select count(*)::int n from payments p join charges c on c.id = p.charge_id where c.month = $1`, [next])
+    return `${next}: ${r.n} mensalistas cobrados`
+  })
+  await expect('não cria mensalidade de mês passado', () => q(`select create_month_fee((current_month() - interval '1 month')::date)`), true)
+  await expect('quem vira mensalista entra na do mês e na seguinte, não nas antigas', async () => {
+    await as(null)
+    await q(`update app_settings set mensalista_quota = 50`)
+    const old = (await one(`insert into charges (kind, title, amount, month) values ('mensalidade', 'Mensalidade', 47, (current_month() - interval '1 month')::date) returning id`)).id
+    await as(id('adm'))
+    await q(`select set_player_type($1, 'mensalista')`, [id('dia')])
+    const r = await q(`select c.month::text from payments p join charges c on c.id = p.charge_id where p.profile_id = $1 and c.kind = 'mensalidade' order by 1`, [id('dia')])
+    const months = r.rows.map((x) => x.month)
+    if (months.includes((await one(`select month::text m from charges where id = $1`, [old])).m)) throw new Error('cobrou mês antigo')
+    return months.join(', ')
+  })
+  await expect('admin dispensa alguém de uma cobrança', async () => {
+    const charge = (await one(`select id from charges where kind = 'mensalidade' and month = current_month()`)).id
+    await q(`select dismiss_payment($1, $2)`, [charge, id('dia')])
+    const r = await one(`select count(*)::int n from payments where charge_id = $1 and profile_id = $2`, [charge, id('dia')])
+    return r.n === 0 ? 'dispensado' : 'ainda cobrado'
+  })
+  // volta o diarista de teste e a cota para os testes seguintes
+  await q(`select set_player_type($1, 'diarista')`, [id('dia')])
+  await as(null)
+  await q(`update app_settings set mensalista_quota = 12`)
+
   // caixa
   await expect('confirmar pagamento lança no caixa com quem recebeu', async () => {
     await as(id('adm'))

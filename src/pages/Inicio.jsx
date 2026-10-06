@@ -176,7 +176,10 @@ export default function Inicio() {
       <NextPelada />
 
       <div className="flex items-center pt-4 pr-2 pl-4">
-        <span className="flex-1 text-lg font-bold">Pódio de {monthName(month)}</span>
+        <span className="flex-1 text-lg font-bold">
+          Pódio de {monthName(month)}
+          {month.slice(0, 4) !== todayISO().slice(0, 4) && ` ${month.slice(0, 4)}`}
+        </span>
         <button className="flex h-11 w-11 items-center justify-center" aria-label="Mês anterior" onClick={() => setMonth(addMonths(month, -1))}>
           <ChevronLeft size={22} />
         </button>
