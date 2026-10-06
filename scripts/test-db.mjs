@@ -14,6 +14,17 @@ async function expect(name, fn, shouldFail = false) {
   try { const r = await fn(); if (shouldFail) { fail++; console.log('FALHOU (devia dar erro):', name) } else { ok++; console.log('ok', name, typeof r === 'string' ? r : '') } await q('release savepoint t') }
   catch (e) { await q('rollback to savepoint t'); if (shouldFail) { ok++; console.log('ok', name, '->', e.message) } else { fail++; console.log('FALHOU:', name, '->', e.message) } }
 }
+// dentro de um teste: esta ação precisa ser recusada
+async function expect_fail(fn) {
+  await q('savepoint f')
+  try {
+    await fn()
+  } catch {
+    await q('rollback to savepoint f')
+    return
+  }
+  throw new Error('devia ter sido recusado')
+}
 const U = {}; const id = (n) => (U[n] ??= crypto.randomUUID())
 const mkUser = (n, meta) => q(`insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data, created_at, updated_at) values ($1,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',$2,$3,now(),now())`, [id(n), n + '@aposentados.app', meta])
 const one = async (s, p) => (await q(s, p)).rows[0]
@@ -86,6 +97,38 @@ try {
     return '\n' + r.rows.map((x) => `   ${x.rank_total}o ${x.name}: ${x.goals}G ${x.assists}A ${x.wins}V = ${x.total}`).join('\n')
   })
   await expect('j7 (entrou na substituição, time perdeu) sem vitória', async () => JSON.stringify(await one(`select games, wins from player_month_stats where profile_id=$1`, [id('j7')])))
+
+  await expect('troféus só saem quando o mês fecha', async () => {
+    const r = await one(`select count(*)::int n from awards where month = current_month()`)
+    if (r.n) throw new Error(`${r.n} troféus no mês atual`)
+    return 'nenhum no mês atual'
+  })
+  await expect('troféus do mês fechado', async () => {
+    await as(null)
+    await q(`update peladas set date = '2026-09-13' where id = $1`, [pel])
+    await as(id('adm'))
+    const r = await q(`select a.award, a.position, p.name from awards a join profiles p on p.id = a.profile_id where a.month = '2026-09-01' order by a.award, a.position, p.name`)
+    return '\n' + r.rows.map((x) => `   ${x.award} ${x.position}o: ${x.name}`).join('\n')
+  })
+  await expect('mensalidade do mês é criada uma vez só', async () => {
+    await as(null)
+    await q(`update app_settings set fee_amount = 50, fee_due_day = 10`)
+    await as(id('adm'))
+    await q(`select ensure_current_fee()`)
+    await q(`select ensure_current_fee()`)
+    const r = await one(`select count(*)::int n, min(due_date)::text due from charges where kind = 'mensalidade' and month = current_month()`)
+    if (r.n !== 1) throw new Error(`${r.n} mensalidades`)
+    return `vence ${r.due}`
+  })
+  await expect('jogador informa pagamento e admin confirma', async () => {
+    const charge = (await one(`select id from charges where kind = 'mensalidade' and month = current_month()`)).id
+    await as(id('j3'))
+    await q(`select inform_payment($1)`, [charge])
+    await expect_fail(() => q(`select confirm_payment($1, $2)`, [charge, id('j3')]))
+    await as(id('adm'))
+    await q(`select confirm_payment($1, $2)`, [charge, id('j3')])
+    return (await one(`select status from payments where charge_id = $1 and profile_id = $2`, [charge, id('j3')])).status
+  })
 
   // notas
   await as(id('j1'))

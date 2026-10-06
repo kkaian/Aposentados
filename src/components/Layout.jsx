@@ -37,7 +37,7 @@ const MENU = [
   { to: '/pelada', label: 'Pelada de hoje', icon: CalendarDays },
   { to: '/historico', label: 'Histórico', icon: History },
   { to: '/times', label: 'Times da pelada', icon: Shirt },
-  { to: '/notas', label: 'Notas', icon: Star },
+  { to: '/notas', label: 'Avaliar colegas', icon: Star },
   { to: '/pagamentos', label: 'Pagamentos', icon: Wallet },
   { to: '/perfil', label: 'Perfil', icon: User },
 ]
@@ -52,6 +52,7 @@ const TITLES = {
   ...Object.fromEntries([...MENU, ...ADMIN_MENU].map((m) => [m.to, m.label])),
   '/presenca': 'Presença',
   '/times/meu': 'Meu time',
+  '/trocar-senha': 'Trocar senha',
   '/admin/cadastros': 'Cadastros',
   '/admin/permissoes': 'Permissões',
   '/admin/mensalistas': 'Mensalistas',
@@ -63,6 +64,7 @@ const TITLES = {
 const PREFIX_TITLES = [
   ['/admin/peladas/nova', 'Criar pelada'],
   ['/jogo/', 'Jogo'],
+  ['/notas/', 'Avaliar jogador'],
   ['/admin/encerrar/', 'Encerrar pelada'],
   ['/jogador/', 'Jogador'],
   ['/presenca/', 'Presença'],

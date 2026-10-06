@@ -170,3 +170,13 @@ Estas decisões valem sobre o texto acima e sobre os wireframes.
 | Roxo | `#6B3FA0` |
 | Cinza | `#7A8394` |
 | Grená | `#7A1F2B` |
+
+## 12. Decisões de implementação (a confirmar com o uso)
+
+- **Quem pode ser escolhido pelos capitães:** só quem confirmou presença ("Vou", fora da lista de espera). Se a escolha não terminar até o horário da pelada, o app sorteia o restante.
+- **Notas:** a regra "1 vez por mês" vale para cada jogador avaliado (você pode mudar a nota de vários colegas no mesmo mês, uma vez cada).
+- **Troféus:** aparecem quando o mês fecha (a partir do dia 1º do mês seguinte).
+- **Cotinhas:** valem para todos os mensalistas. A mensalidade do mês é criada sozinha quando o valor é maior que zero.
+- **Sorteio equilibrado:** jogador sem overall (menos de 3 avaliações) conta como 3.
+- **Senha temporária:** o admin gera no app (Admin → Cadastros) e passa por fora; o jogador é obrigado a criar a dele no próximo acesso.
+- **Backup:** GitHub Action a cada 3 dias, criptografado (o repositório é público).

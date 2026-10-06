@@ -39,3 +39,12 @@ export async function uploadAvatar(userId, file) {
   if (error) throw error
   return `${path}?v=${Date.now()}`
 }
+
+// Escudo de kit: oficiais/ (admin) ou sugestoes/<id>/ (capitão)
+export async function uploadShield(file, folder) {
+  const blob = await shrinkImage(file, { size: 256, maxBytes: 60_000 })
+  const path = `${folder}/${Date.now()}.jpg`
+  const { error } = await supabase.storage.from('kits').upload(path, blob, { contentType: 'image/jpeg' })
+  if (error) throw error
+  return path
+}

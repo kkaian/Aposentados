@@ -1,4 +1,4 @@
-import { Check, Lock } from 'lucide-react'
+import { Check, Lock, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import TeamShield from '../components/TeamShield'
@@ -10,6 +10,7 @@ import { fetchCurrentPelada } from '../lib/peladas'
 import { shieldUrl } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 import { colorOf, fetchTeams } from '../lib/teams'
+import { KitForm } from './admin/Kits'
 
 // Capitão escolhe kit (nome + escudo) e cor; quem escolhe primeiro bloqueia para os outros
 export default function MeuTime() {
@@ -21,7 +22,10 @@ export default function MeuTime() {
   const [kitId, setKitId] = useState(null)
   const [color, setColor] = useState(null)
   const [error, setError] = useState('')
+  const [ok, setOk] = useState('')
   const [busy, setBusy] = useState(false)
+  const [kitForm, setKitForm] = useState(false)
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
     ;(async () => {
@@ -37,7 +41,7 @@ export default function MeuTime() {
       setKitId(mine?.kit_id ?? null)
       setColor(mine?.color?.id ?? null)
     })()
-  }, [profile.id, teamId])
+  }, [profile.id, teamId, reload])
 
   if (data === undefined) return <Spinner />
   if (!data?.mine) {
@@ -93,6 +97,12 @@ export default function MeuTime() {
         })}
       </div>
 
+      <div className="px-4 pt-2">
+        <button className="flex h-10 items-center gap-1 text-sm font-semibold text-action" onClick={() => setKitForm(true)}>
+          <Plus size={16} /> {data.creation ? 'Criar kit novo' : 'Sugerir kit ao admin'}
+        </button>
+      </div>
+
       <SectionLabel>Cor</SectionLabel>
       <div className="flex flex-wrap gap-3 px-4">
         {TEAM_COLORS.map((c) => {
@@ -121,14 +131,37 @@ export default function MeuTime() {
 
       <div className="space-y-2 px-4 pt-4">
         <Notice>{error}</Notice>
+        <Notice kind="ok">{ok}</Notice>
         <button className="btn w-full" disabled={busy} onClick={save}>
           Salvar time
         </button>
         <p className="text-xs text-muted">
           Na mesma pelada, quem escolhe primeiro bloqueia o kit e a cor. Na próxima pelada, tudo fica livre de novo.
-          {!data.creation && ' Criação de kit novo desativada pelo admin.'}
+          {!data.creation && ' Criação de kit novo desativada pelo admin: você pode sugerir um.'}
         </p>
       </div>
+
+      {kitForm && (
+        <KitForm
+          title={data.creation ? 'Criar kit novo' : 'Sugerir kit ao admin'}
+          subtitle={data.creation ? 'O kit entra na lista e já pode ser usado.' : 'O admin aprova e o kit entra na lista.'}
+          folder={`sugestoes/${profile.id}`}
+          submitLabel={data.creation ? 'Criar kit' : 'Enviar sugestão'}
+          onClose={() => setKitForm(false)}
+          onSubmit={async (name, path) => {
+            if (data.creation) {
+              const { data: newId, error } = await supabase.rpc('create_kit_by_captain', { p_name: name, p_shield_path: path })
+              if (error) throw error
+              setKitId(newId)
+              setReload((n) => n + 1)
+            } else {
+              const { error } = await supabase.from('kit_suggestions').insert({ name, shield_path: path, suggested_by: profile.id })
+              if (error) throw error
+              setOk('Sugestão enviada ao admin.')
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

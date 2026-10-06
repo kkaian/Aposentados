@@ -13,6 +13,7 @@ export default function Cadastros() {
   const [confirmNew, setConfirmNew] = useState(false)
   const [msg, setMsg] = useState({})
   const [busy, setBusy] = useState(null)
+  const [temp, setTemp] = useState(null)
 
   const load = useCallback(async () => {
     const [inv, pend, reqs] = await Promise.all([
@@ -122,13 +123,38 @@ export default function Cadastros() {
             <div className="truncate">{r.profile.name}</div>
             <div className="text-xs text-muted">@{r.profile.username}</div>
           </div>
-          <button className="btn-ghost h-9 px-3 text-sm" disabled title="Chega na próxima etapa">
+          <button
+            className="btn h-9 px-3 text-sm"
+            disabled={busy === r.id}
+            onClick={async () => {
+              setBusy(r.id)
+              const { data, error } = await supabase.rpc('admin_reset_password', { p_profile: r.profile.id })
+              setBusy(null)
+              if (error) setMsg({ error: friendlyError(error) })
+              else {
+                setTemp({ name: r.profile.name, password: data })
+                load()
+              }
+            }}
+          >
             Gerar senha
           </button>
         </div>
       ))}
-      {requests.length > 0 && (
-        <div className="px-4 pt-2 text-xs text-muted">Gerar senha temporária chega na próxima etapa (precisa de uma função no servidor).</div>
+      {temp && (
+        <Sheet title={`Senha temporária de ${temp.name}`} subtitle="Passe para o jogador por fora do app (WhatsApp, pessoalmente). Ele cria a senha dele no primeiro acesso." onClose={() => setTemp(null)}>
+          <div className="rounded-xl border border-line-2 p-4 text-center font-mono text-3xl font-bold tracking-wider select-all">{temp.password}</div>
+          <button
+            className="btn mt-3 flex w-full items-center justify-center gap-2"
+            onClick={() => navigator.clipboard?.writeText(temp.password).then(() => setMsg({ ok: 'Senha copiada.' }), () => {})}
+          >
+            <Copy size={16} /> Copiar senha
+          </button>
+          <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setTemp(null)}>
+            Fechar
+          </button>
+          <p className="text-xs text-muted">Ela só aparece agora. Se perder, gere outra.</p>
+        </Sheet>
       )}
 
       {confirmNew && (

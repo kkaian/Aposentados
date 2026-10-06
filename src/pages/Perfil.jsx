@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
 import { Notice, Segmented, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
-import { addMonths, monthLabel, monthStart, todayISO } from '../lib/dates'
+import { addMonths, monthLabel, monthName, monthStart, todayISO } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
 import { photoUrl, uploadAvatar } from '../lib/storage'
 import { supabase } from '../lib/supabase'
@@ -135,6 +135,55 @@ function RatingsBlock({ profileId }) {
   )
 }
 
+const AWARDS = {
+  melhor_mes: { icon: ['🏆', '🥈', '🥉'], label: (pos) => `Melhor do mês · ${pos}º lugar` },
+  artilheiro: { icon: ['⚽'], label: () => 'Artilheiro do mês' },
+  garcom: { icon: ['🎯'], label: () => 'Garçom do mês' },
+  mais_vitorias: { icon: ['💪'], label: () => 'Mais vitórias do mês' },
+  selecao: { icon: ['⭐'], label: () => 'Seleção do mês' },
+}
+
+function TrophiesBlock({ profileId }) {
+  const [awards, setAwards] = useState()
+  useEffect(() => {
+    supabase
+      .from('awards')
+      .select('*')
+      .eq('profile_id', profileId)
+      .order('month', { ascending: false })
+      .then(({ data }) => setAwards(data ?? []))
+  }, [profileId])
+
+  return (
+    <div className="card mx-4 mt-4">
+      <div className="mb-1 flex items-baseline justify-between">
+        <b>Troféus</b>
+        <span className="text-xs text-muted">prêmios mensais</span>
+      </div>
+      {awards?.length === 0 && (
+        <div className="flex items-center gap-3 py-2 text-sm text-muted">
+          <Trophy size={20} />
+          Sem troféus ainda
+        </div>
+      )}
+      {awards?.map((a) => {
+        const def = AWARDS[a.award]
+        return (
+          <div key={`${a.month}-${a.award}`} className="flex min-h-12 items-center gap-3 border-b border-row last:border-0">
+            <span className="w-7 text-center text-xl">{def.icon[Math.min(a.position, def.icon.length) - 1]}</span>
+            <div>
+              <div className="text-sm">{def.label(a.position)}</div>
+              <div className="text-xs text-muted">
+                {monthName(a.month)} {a.month.slice(0, 4)}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Perfil() {
   const { id } = useParams()
   const { profile: me, refreshProfile } = useAuth()
@@ -213,22 +262,20 @@ export default function Perfil() {
       <StatsBlock profileId={player.id} />
       <RatingsBlock profileId={player.id} />
 
-      <div className="card mx-4 mt-4">
-        <div className="mb-2 flex items-baseline justify-between">
-          <b>Troféus</b>
-          <span className="text-xs text-muted">prêmios mensais</span>
-        </div>
-        <div className="flex items-center gap-3 py-2 text-sm text-muted">
-          <Trophy size={20} />
-          Sem troféus ainda
-        </div>
-      </div>
+      <TrophiesBlock profileId={player.id} />
 
       <div className="px-4 pt-4">
         {isMe ? (
-          <Link to="/notas" className="btn-outline flex w-full items-center justify-center">
-            Avaliar colegas
-          </Link>
+          <>
+            {me.type === 'mensalista' && (
+              <Link to="/notas" className="btn-outline flex w-full items-center justify-center">
+                Avaliar colegas
+              </Link>
+            )}
+            <Link to="/trocar-senha" className="mt-2 flex h-11 w-full items-center justify-center text-sm text-muted">
+              Trocar senha
+            </Link>
+          </>
         ) : (
           player.type === 'mensalista' &&
           me.type === 'mensalista' && (

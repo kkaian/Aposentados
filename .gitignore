@@ -25,3 +25,6 @@ dist-ssr
 
 # Cópia compactada de docs/ (o conteúdo já está extraído)
 docs/pelada-app-docs.zip
+
+# Backups locais (scripts/backup.mjs)
+backup/

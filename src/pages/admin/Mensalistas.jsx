@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Avatar from '../../components/Avatar'
 import { AdminBadge, Notice, SectionLabel, Spinner } from '../../components/ui'
 import { friendlyError } from '../../lib/errors'
+import { todayISO } from '../../lib/dates'
 import { photoUrl } from '../../lib/storage'
 import { supabase } from '../../lib/supabase'
 
@@ -24,6 +25,7 @@ export default function Mensalistas() {
   const [settings, setSettings] = useState()
   const [form, setForm] = useState({})
   const [players, setPlayers] = useState([])
+  const [feeStatus, setFeeStatus] = useState(null)
   const [msg, setMsg] = useState({})
   const [busy, setBusy] = useState(null)
 
@@ -35,6 +37,14 @@ export default function Mensalistas() {
     setSettings(s.data)
     setForm({ fee_amount: s.data.fee_amount, fee_due_day: s.data.fee_due_day, mensalista_quota: s.data.mensalista_quota })
     setPlayers(p.data ?? [])
+    // situação na mensalidade do mês
+    await supabase.rpc('ensure_current_fee')
+    const { data: fee } = await supabase.from('charges').select('id, due_date').eq('kind', 'mensalidade').eq('month', `${todayISO().slice(0, 7)}-01`).maybeSingle()
+    if (!fee) return setFeeStatus(null)
+    const { data: pays } = await supabase.from('payments').select('profile_id, status').eq('charge_id', fee.id)
+    const paid = new Set((pays ?? []).filter((x) => x.status === 'confirmado').map((x) => x.profile_id))
+    const late = fee.due_date < todayISO()
+    setFeeStatus(() => (id) => (paid.has(id) ? 'em dia' : late ? 'atrasado' : 'mensalidade pendente'))
   }, [])
 
   useEffect(() => {
@@ -116,7 +126,7 @@ export default function Mensalistas() {
       <SectionLabel>Mensalistas · {mensalistas.length}</SectionLabel>
       {mensalistas.length === 0 && <div className="px-4 text-sm text-muted">Nenhum mensalista ainda.</div>}
       {mensalistas.map((p) => (
-        <PlayerRow key={p.id} p={p} sub={`${roleNote(p)}ocupa vaga da cota`} action="Retirar" disabled={busy === p.id} onAction={() => setType(p, 'diarista')} />
+        <PlayerRow key={p.id} p={p} sub={`${roleNote(p)}${feeStatus ? feeStatus(p.id) : 'ocupa vaga da cota'}`} action="Retirar" disabled={busy === p.id} onAction={() => setType(p, 'diarista')} />
       ))}
 
       <SectionLabel>Diaristas cadastrados · {diaristas.length}</SectionLabel>
