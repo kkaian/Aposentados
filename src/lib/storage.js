@@ -1,6 +1,4 @@
-import { supabase } from './supabase'
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+import { SUPABASE_URL, supabase } from './supabase'
 
 // URL pública de um arquivo; caminhos que começam com "/" são arquivos do próprio app
 export function publicUrl(bucket, path) {

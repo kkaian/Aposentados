@@ -1,4 +1,4 @@
-import { Crown, Search } from 'lucide-react'
+import { Copy, Crown, KeyRound, Search } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import Avatar from '../../components/Avatar'
 import Sheet from '../../components/Sheet'
@@ -19,6 +19,7 @@ export default function Permissoes() {
   const [busy, setBusy] = useState(null)
   const [transferOpen, setTransferOpen] = useState(false)
   const [newOwner, setNewOwner] = useState(null)
+  const [access, setAccess] = useState(null)
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('profiles').select('id, name, username, role, type, photo_path').eq('status', 'ativo')
@@ -71,7 +72,7 @@ export default function Permissoes() {
           <input className="field pl-10" placeholder="Buscar jogador" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         <p className="mt-2 text-xs text-muted">
-          Só o dono define quem é admin. Quem vira admin começa como mensalista, mas pode ser retirado da mensalidade e continuar
+          Toque na chave para ver o usuário de alguém ou gerar uma senha temporária. Só o dono define quem é admin. Quem vira admin começa como mensalista, mas pode ser retirado da mensalidade e continuar
           admin. Ajudantes são escolhidos em cada pelada.
         </p>
       </div>
@@ -87,8 +88,15 @@ export default function Permissoes() {
           <Avatar name={p.name} src={photoUrl(p.photo_path)} />
           <div className="min-w-0 flex-1">
             <div className="truncate">{p.name}</div>
-            <div className="text-xs text-muted">{p.type}</div>
+            <div className="text-xs text-muted">
+              @{p.username} · {p.type}
+            </div>
           </div>
+          {(p.role !== 'dono' || isOwner) && (
+            <button className="flex h-10 w-10 items-center justify-center text-muted" aria-label={`Recuperar acesso de ${p.name}`} onClick={() => setAccess({ player: p })}>
+              <KeyRound size={18} />
+            </button>
+          )}
           {p.role === 'dono' ? (
             <span className="flex items-center gap-1 text-sm font-semibold text-gold">
               <Crown size={16} /> Dono
@@ -118,6 +126,46 @@ export default function Permissoes() {
           </button>
           {admins.length === 0 && <div className="mt-2 text-xs text-muted">Primeiro torne alguém admin.</div>}
         </div>
+      )}
+
+      {access && (
+        <Sheet title={`Acesso de ${access.player.name}`} subtitle="Para quem esqueceu o usuário ou a senha. Passe por fora do app (WhatsApp, pessoalmente)." onClose={() => setAccess(null)}>
+          <div className="text-xs text-muted">Usuário para entrar</div>
+          <div className="mb-3 font-mono text-xl font-bold select-all">{access.player.username}</div>
+          {access.password ? (
+            <>
+              <div className="text-xs text-muted">Senha temporária</div>
+              <div className="rounded-xl border border-line-2 p-4 text-center font-mono text-3xl font-bold tracking-wider select-all">{access.password}</div>
+              <button
+                className="btn mt-3 flex w-full items-center justify-center gap-2"
+                onClick={() => navigator.clipboard?.writeText(`Usuário: ${access.player.username}
+Senha temporária: ${access.password}`).then(() => setMsg({ ok: 'Copiado.' }), () => {})}
+              >
+                <Copy size={16} /> Copiar usuário e senha
+              </button>
+              <p className="mt-2 text-xs text-muted">No próximo acesso, o jogador cria a senha dele. Esta só aparece agora.</p>
+            </>
+          ) : (
+            <button
+              className="btn w-full"
+              disabled={busy === 'reset'}
+              onClick={async () => {
+                setBusy('reset')
+                const { data, error } = await supabase.rpc('admin_reset_password', { p_profile: access.player.id })
+                setBusy(null)
+                if (error) {
+                  setAccess(null)
+                  setMsg({ error: friendlyError(error) })
+                } else setAccess((a) => ({ ...a, password: data }))
+              }}
+            >
+              Gerar senha temporária
+            </button>
+          )}
+          <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setAccess(null)}>
+            Fechar
+          </button>
+        </Sheet>
       )}
 
       {transferOpen && (

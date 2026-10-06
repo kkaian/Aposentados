@@ -1,10 +1,6 @@
-import { AtSign, Clock, Ticket, User, XCircle } from 'lucide-react'
-import { useState } from 'react'
-import { Field, Notice } from '../components/ui'
-import { friendlyError } from '../lib/errors'
+import { Clock, XCircle } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import { USERNAME_RE } from '../lib/constants'
 
 function Shell({ icon: Icon, title, children }) {
   return (
@@ -20,42 +16,6 @@ function Shell({ icon: Icon, title, children }) {
   )
 }
 
-// Entrou pelo Google: falta convite, usuário e nome
-function CompletarCadastro() {
-  const { profile, refreshProfile } = useAuth()
-  const [form, setForm] = useState({ invite: '', username: '', name: profile?.name ?? '' })
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
-
-  async function submit(e) {
-    e.preventDefault()
-    setError('')
-    const username = form.username.trim().toLowerCase()
-    if (!USERNAME_RE.test(username)) return setError('Usuário: 3 a 20 letras minúsculas, números, ponto ou _.')
-    setBusy(true)
-    const { error } = await supabase.rpc('complete_signup', { p_invite: form.invite, p_username: username, p_name: form.name })
-    setBusy(false)
-    if (error) setError(friendlyError(error))
-    else refreshProfile()
-  }
-
-  return (
-    <Shell title="Complete seu cadastro">
-      <p className="mt-1 text-sm text-muted">Falta o código de convite e o nome de usuário.</p>
-      <form className="mt-6 flex w-full flex-col gap-3 text-left" onSubmit={submit}>
-        <Field label="Código de convite" id="invite" icon={Ticket} autoCapitalize="characters" value={form.invite} onChange={set('invite')} required />
-        <Field label="Nome" id="name" icon={User} maxLength={40} value={form.name} onChange={set('name')} required />
-        <Field label="Nome de usuário" id="username" icon={AtSign} autoCapitalize="none" maxLength={20} value={form.username} onChange={set('username')} required />
-        <Notice>{error}</Notice>
-        <button className="btn" disabled={busy}>
-          {busy ? 'Enviando…' : 'Enviar cadastro'}
-        </button>
-      </form>
-    </Shell>
-  )
-}
-
 export default function ContaStatus() {
   const { profile, refreshProfile } = useAuth()
 
@@ -66,7 +26,6 @@ export default function ContaStatus() {
       </Shell>
     )
   }
-  if (profile.status === 'incompleto') return <CompletarCadastro />
   if (profile.status === 'pendente') {
     return (
       <Shell icon={Clock} title="Cadastro enviado">

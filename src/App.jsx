@@ -2,7 +2,6 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { Spinner } from './components/ui'
 import { isAdminRole, useAuth } from './lib/auth'
-import { isSupabaseConfigured } from './lib/supabase'
 import Admin from './pages/admin/Admin'
 import DefinirCapitaes from './pages/admin/DefinirCapitaes'
 import Diarista from './pages/admin/Diarista'
@@ -39,9 +38,6 @@ function AdminOnly() {
 export default function App() {
   const { session, profile, loading } = useAuth()
 
-  if (!isSupabaseConfigured) {
-    return <div className="p-6 text-center text-muted">Configure o Supabase no arquivo .env.local.</div>
-  }
   if (loading) return <Spinner className="pt-32" />
 
   if (!session) {

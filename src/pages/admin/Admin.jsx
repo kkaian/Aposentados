@@ -23,7 +23,7 @@ export default function Admin() {
 
   const items = [
     { to: '/admin/cadastros', icon: UserCheck, title: 'Aprovar cadastros', sub: 'Novos jogadores e pedidos de senha', count: pending + passwordReqs },
-    { to: '/admin/permissoes', icon: Users, title: 'Jogadores e permissões', sub: 'Dono, admin e jogador' },
+    { to: '/admin/permissoes', icon: Users, title: 'Jogadores e permissões', sub: 'Funções e recuperar acesso (usuário e senha)' },
     { to: '/admin/peladas', icon: CalendarDays, title: 'Peladas', sub: 'Criar, editar e definir ajudantes' },
     { to: '/admin/mensalistas', icon: BadgeDollarSign, title: 'Mensalistas e cota', sub: 'Valor, vencimento e vagas' },
     { to: '/admin/cadastros', icon: Ticket, title: 'Código de convite', sub: 'Ver, copiar ou gerar um novo' },

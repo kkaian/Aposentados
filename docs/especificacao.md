@@ -11,7 +11,7 @@ Site instalável (PWA) para a pelada: registra jogos, gols, assistências e cart
 - **Front:** React + Vite + Tailwind + `vite-plugin-pwa` (instalável pela tela inicial).
 - **Back:** Supabase no plano gratuito (Postgres, Auth, Storage, Row Level Security). Sem servidor próprio.
 - **Hospedagem:** Vercel ou Netlify (gratuito).
-- **Login:** usuário + senha (obrigatório) e Google (opcional).
+- **Login:** só usuário + senha (sem Google). Quem esquece o usuário ou a senha recupera com o admin (Admin → Jogadores e permissões → chave), que gera uma senha temporária.
 - **Fotos:** reduzir no celular (~100 KB) antes de enviar; trocar a foto substitui o arquivo antigo.
 - **Instalação:** o menu hambúrguer tem o item "Instalar app". No Android (Chrome), usar o evento `beforeinstallprompt` para abrir o aviso de instalar. No iPhone (Safari) não existe instalação por botão: mostrar as instruções (Compartilhar, Adicionar à Tela de Início, Adicionar). Esconder o item quando o app já roda instalado (`display-mode: standalone`).
 - **Backup:** rotina semanal (ex.: GitHub Actions) que exporta os dados em CSV. Serve também para evitar a pausa do projeto por inatividade.
@@ -81,7 +81,7 @@ Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#
 
 | Tela | Arquivo | Quem acessa | Resumo |
 |---|---|---|---|
-| Login | `Login` | todos | usuário/senha, Google, esqueci minha senha, criar conta |
+| Login | `Login` | todos | usuário/senha, esqueci minha senha, criar conta |
 | Cadastro | `Cadastro` | novo | código de convite, nome, usuário, senha |
 | Esqueci minha senha | `EsqueciSenha` | todos | pede nova senha ao admin |
 | Menu lateral | `Menu` | logados | navegação; seção Admin só para admin |
