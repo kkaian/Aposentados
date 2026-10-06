@@ -51,6 +51,7 @@ const ADMIN_MENU = [
 const TITLES = {
   ...Object.fromEntries([...MENU, ...ADMIN_MENU].map((m) => [m.to, m.label])),
   '/presenca': 'Presença',
+  '/times/meu': 'Meu time',
   '/admin/cadastros': 'Cadastros',
   '/admin/permissoes': 'Permissões',
   '/admin/mensalistas': 'Mensalistas',
@@ -59,8 +60,21 @@ const TITLES = {
   '/admin/exportar': 'Exportar dados',
 }
 
+const PREFIX_TITLES = [
+  ['/admin/peladas/nova', 'Criar pelada'],
+  ['/jogo/', 'Jogo'],
+  ['/admin/encerrar/', 'Encerrar pelada'],
+  ['/jogador/', 'Jogador'],
+  ['/presenca/', 'Presença'],
+  ['/admin/peladas/', 'Pelada'],
+]
+
 const titleFor = (pathname) =>
-  pathname === '/' ? 'Aposentados FC' : (TITLES[pathname] ?? (pathname.startsWith('/jogador/') ? 'Jogador' : 'Aposentados FC'))
+  pathname === '/'
+    ? 'Aposentados FC'
+    : pathname.endsWith('/capitaes')
+      ? 'Definir capitães'
+    : (TITLES[pathname] ?? PREFIX_TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'Aposentados FC')
 
 const itemClass = 'flex h-12 w-full items-center gap-3 rounded-lg px-3 text-left transition-colors active:bg-surface-2'
 
