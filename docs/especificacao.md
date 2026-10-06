@@ -52,7 +52,7 @@ Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#
 - **Artilheiro, Garçom (assistências) e Mais vitórias:** só o 1º lugar.
 - **Seleção do mês:** o time com mais vitórias em uma pelada do mês. Desempate pelo time com mais gols; se empatar de novo, os dois levam. Todos que estavam no time nessa pelada ganham.
 
-**Notas:** drible, chute, velocidade, defesa, passe e overall, em 1 a 5 estrelas (estilo Uber). Voto anônimo, sem votar em si mesmo. Opcional: o jogador avalia só quem quiser. Cada avaliador edita suas avaliações **1 vez por mês**; a nota anterior continua valendo. Média = voto mais recente de cada pessoa. Mostrar a média só com 3 ou mais avaliações.
+**Notas:** drible, chute, velocidade, defesa, passe e overall, em 1 a 5 estrelas (estilo Uber). Voto anônimo, sem votar em si mesmo. Opcional: o jogador avalia só quem quiser. Cada avaliador muda cada avaliação **1 vez por pelada** (libera de novo quando o admin encerra a pelada); a nota anterior continua valendo. Média = voto mais recente de cada pessoa. Mostrar a média só com 3 ou mais avaliações.
 
 **Times da pelada** (refeitos a cada pelada):
 1. Em cada pelada, o admin escolhe 4 capitães entre os mensalistas. A ordem em que os define é a ordem dos capitães (1 a 4).
@@ -174,7 +174,7 @@ Estas decisões valem sobre o texto acima e sobre os wireframes.
 ## 12. Decisões de implementação (a confirmar com o uso)
 
 - **Quem pode ser escolhido pelos capitães:** só quem confirmou presença ("Vou", fora da lista de espera). Se a escolha não terminar até o horário da pelada, o app sorteia o restante.
-- **Notas:** a regra "1 vez por mês" vale para cada jogador avaliado (você pode mudar a nota de vários colegas no mesmo mês, uma vez cada).
+- **Notas:** cada jogador avaliado pode ter a nota mudada 1 vez por pelada (entre um encerramento e o próximo). Quem avaliou antes de existirem defesa e passe pode completar sem gastar a mudança.
 - **Troféus:** aparecem quando o mês fecha (a partir do dia 1º do mês seguinte).
 - **Mensalidades e cotinhas:** cada cobrança vale para os mensalistas do momento em que foi criada. A do mês atual é criada sozinha (valor > 0); o admin cria a do mês seguinte quando quiser (até 2 meses à frente). Quem vira mensalista entra na do mês e nas já criadas para frente, nunca nas antigas. O jogador vê tudo que está em aberto (atrasadas, do mês, adiantadas) e o histórico pago. O admin pode dispensar alguém de uma cobrança.
 - **Sorteio equilibrado:** jogador sem overall (menos de 3 avaliações) conta como 3.

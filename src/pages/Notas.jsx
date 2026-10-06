@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
 import { Notice, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
-import { monthName, monthStart, todayISO } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
 import { photoUrl } from '../lib/storage'
 import { supabase } from '../lib/supabase'
@@ -17,8 +16,13 @@ const RATING_FIELDS = [
   ['overall', 'Overall'],
 ]
 
-// mês (São Paulo) em que a nota foi alterada pela última vez
-const monthOfTimestamp = (ts) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(ts)).slice(0, 7) + '-01'
+// Cada nota muda 1 vez por pelada: trava se já mudou depois da última pelada encerrada
+const isLocked = (rating, lastClosed) => Boolean(rating && lastClosed && Date.parse(rating.updated_at) >= Date.parse(lastClosed))
+const lastClosedAt = async () => {
+  const { data } = await supabase.rpc('last_pelada_closed_at')
+  return data === '-infinity' ? '1970-01-01T00:00:00Z' : data
+}
+const dayBR = (ts) => new Date(ts).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })
 
 function MiniStars({ value }) {
   const pct = value ? (value / 5) * 100 : 0
@@ -41,35 +45,38 @@ export function AvaliarLista() {
   const { profile } = useAuth()
   const [players, setPlayers] = useState()
   const [mine, setMine] = useState({})
+  const [lastClosed, setLastClosed] = useState(null)
 
   useEffect(() => {
     Promise.all([
       supabase.from('profiles').select('id, name, photo_path').eq('status', 'ativo').eq('type', 'mensalista').neq('id', profile.id).order('name'),
       supabase.from('ratings').select('*').eq('rater_id', profile.id),
-    ]).then(([p, r]) => {
+      lastClosedAt(),
+    ]).then(([p, r, closed]) => {
       setPlayers(p.data ?? [])
       setMine(Object.fromEntries((r.data ?? []).map((x) => [x.rated_id, x])))
+      setLastClosed(closed)
     })
   }, [profile.id])
 
   if (profile.type !== 'mensalista') return <NotMensalista />
   if (!players) return <Spinner />
-  const thisMonth = monthStart(todayISO())
   const rated = players.filter((p) => mine[p.id]).length
 
   return (
     <div className="pb-6">
       <div className="card mx-4 mt-3 text-sm">
-        <b>Você muda cada nota 1 vez por mês</b>
+        <b>Você muda cada nota 1 vez por pelada</b>
         <div className="mt-1 text-muted">
-          É opcional: mude só quem quiser. A nota anterior continua valendo. Voto anônimo. Avaliados: {rated} de {players.length}.
+          Quando o admin encerra a pelada, as notas liberam de novo. É opcional: mude só quem quiser. A nota anterior continua
+          valendo. Voto anônimo. Avaliados: {rated} de {players.length}.
         </div>
       </div>
       <div className="pt-2">
         {players.map((p) => {
           const r = mine[p.id]
           const incomplete = r && (r.defense == null || r.passing == null)
-          const locked = r && !incomplete && monthOfTimestamp(r.updated_at) === thisMonth
+          const locked = !incomplete && isLocked(r, lastClosed)
           return (
             <Link key={p.id} to={`/notas/${p.id}`} className="flex min-h-16 items-center gap-3 border-b border-row px-4 active:bg-surface-2">
               <Avatar name={p.name} src={photoUrl(p.photo_path)} />
@@ -77,7 +84,7 @@ export function AvaliarLista() {
                 <div className="truncate">{p.name}</div>
                 {r ? <MiniStars value={r.overall} /> : <span className="text-xs text-muted">ainda não avaliado</span>}
               </div>
-              <span className={`text-sm font-semibold ${locked ? 'text-muted' : 'text-action'}`}>{incomplete ? 'Completar' : locked ? 'Mudou este mês' : r ? 'Alterar' : 'Avaliar'}</span>
+              <span className={`text-sm font-semibold ${locked ? 'text-muted' : 'text-action'}`}>{incomplete ? 'Completar' : locked ? 'Já mudou nesta rodada' : r ? 'Alterar' : 'Avaliar'}</span>
             </Link>
           )
         })}
@@ -93,6 +100,7 @@ export function Votar() {
   const { profile } = useAuth()
   const [player, setPlayer] = useState()
   const [current, setCurrent] = useState(null)
+  const [lastClosed, setLastClosed] = useState(null)
   const [values, setValues] = useState({ dribble: 0, shot: 0, speed: 0, defense: 0, passing: 0, overall: 0 })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -101,7 +109,9 @@ export function Votar() {
     Promise.all([
       supabase.from('profiles').select('id, name, photo_path, type').eq('id', id).maybeSingle(),
       supabase.from('ratings').select('*').eq('rater_id', profile.id).eq('rated_id', id).maybeSingle(),
-    ]).then(([p, r]) => {
+      lastClosedAt(),
+    ]).then(([p, r, closed]) => {
+      setLastClosed(closed)
       setPlayer(p.data)
       setCurrent(r.data)
       if (r.data) setValues(Object.fromEntries(RATING_FIELDS.map(([k]) => [k, r.data[k] ?? 0])))
@@ -114,9 +124,8 @@ export function Votar() {
     return <div className="p-6 text-center text-sm text-muted">Não dá para avaliar este jogador.</div>
   }
 
-  const thisMonth = monthStart(todayISO())
   const incomplete = current && (current.defense == null || current.passing == null)
-  const locked = current && !incomplete && monthOfTimestamp(current.updated_at) === thisMonth
+  const locked = !incomplete && isLocked(current, lastClosed)
   const complete = RATING_FIELDS.every(([k]) => values[k] > 0)
 
   async function save() {
@@ -136,11 +145,11 @@ export function Votar() {
         <b className="mt-2 text-lg">{player.name}</b>
         <div className="text-xs text-muted">
           {incomplete
-            ? 'Faltam as notas de defesa e passe. Completar não conta como a mudança do mês.'
+            ? 'Faltam as notas de defesa e passe. Completar não conta como a sua mudança.'
             : current
             ? locked
-              ? `Você já mudou esta nota em ${monthName(thisMonth)}. Volte no mês que vem.`
-              : `Sua nota atual (desde ${monthName(monthOfTimestamp(current.updated_at))}). Mude só se quiser.`
+              ? 'Você já mudou esta nota nesta rodada. Libera de novo quando a próxima pelada for encerrada.'
+              : `Sua nota atual (desde ${dayBR(current.updated_at)}). Mude só se quiser.`
             : 'Opcional: avalie só se quiser.'}
         </div>
       </div>
@@ -175,7 +184,7 @@ export function Votar() {
           {current ? 'Manter minha nota' : 'Voltar'}
         </button>
         <p className="text-xs text-muted">
-          Voto anônimo. Você muda cada nota 1 vez por mês, só dos jogadores que quiser. A nota anterior continua valendo. Não dá para
+          Voto anônimo. Você muda cada nota 1 vez por pelada, só dos jogadores que quiser. A nota anterior continua valendo. Não dá para
           avaliar a si mesmo.
         </p>
       </div>

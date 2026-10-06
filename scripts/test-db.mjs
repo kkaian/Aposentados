@@ -205,7 +205,22 @@ try {
   await expect('mensalista avalia colega', () => q(`insert into ratings (rater_id, rated_id, dribble, shot, speed, defense, passing, overall) values ($1,$2,4,4,4,4,4,4)`, [id('j1'), id('j2')]))
   await expect('nota sem defesa e passe é recusada', () => q(`insert into ratings (rater_id, rated_id, dribble, shot, speed, overall) values ($1,$2,4,4,4,4)`, [id('j1'), id('j3')]), true)
   await expect('não dá para avaliar a si mesmo', () => q(`insert into ratings (rater_id, rated_id, dribble, shot, speed, defense, passing, overall) values ($1,$1,5,5,5,5,5,5)`, [id('j1')]), true)
-  await expect('mudar a mesma nota no mesmo mês é bloqueado', () => q(`update ratings set overall=5 where rated_id=$1`, [id('j2')]), true)
+  await expect('mudar a mesma nota antes da próxima pelada é bloqueado', () => q(`update ratings set overall=5 where rated_id=$1`, [id('j2')]), true)
+  await expect('pelada encerrada libera mudar a nota de novo', async () => {
+    await as(null)
+    // simula o encerramento de uma pelada depois da nota
+    await q(`update peladas set closed_at = now() + interval '1 second' where id = $1`, [pel])
+    await as(id('j1'))
+    const r = await q(`update ratings set overall=5 where rated_id=$1`, [id('j2')])
+    return `${r.rowCount} nota mudada`
+  })
+  await expect('e trava de novo até a pelada seguinte', async () => {
+    await as(null)
+    // a pelada encerrou antes desta última mudança
+    await q(`update peladas set closed_at = now() - interval '1 second' where id = $1`, [pel])
+    await as(id('j1'))
+    return q(`update ratings set overall=3 where rated_id=$1`, [id('j2')])
+  }, true)
   await expect('diarista não é avaliado', () => q(`insert into ratings (rater_id, rated_id, dribble, shot, speed, defense, passing, overall) values ($1,$2,3,3,3,3,3,3)`, [id('j1'), id('dia')]), true)
   await as(id('j2'))
   await expect('ninguém vê quem deu a nota', async () => { const r = await q(`select count(*)::int n from ratings`); if (r.rows[0].n) throw new Error('viu ' + r.rows[0].n); return 'invisível' })
