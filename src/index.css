@@ -1,0 +1,55 @@
+@import 'tailwindcss';
+
+/* Paleta da especificação (seção 3) */
+@theme {
+  --font-sans: 'Barlow', system-ui, sans-serif;
+  --color-bg: #0b1226;
+  --color-surface: #101a38;
+  --color-surface-2: #16224a;
+  --color-line: #243256;
+  --color-line-2: #3a4a73;
+  --color-row: #16203d;
+  --color-ink: #e6eaf2;
+  --color-muted: #8d9ab8;
+  --color-faint: #4f5b7d;
+  --color-action: #3d78ff;
+  --color-silver: #d8dee9;
+  --color-gold: #d9b44a;
+  --color-medal-silver: #c0c7d1;
+  --color-bronze: #b87b4b;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer components {
+  .btn {
+    @apply h-11 rounded-lg border-2 border-action bg-action px-4 font-semibold text-white disabled:opacity-50;
+  }
+  .btn-outline {
+    @apply h-11 rounded-lg border-2 border-action bg-bg px-4 font-semibold text-action disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply h-11 rounded-lg border-2 border-line-2 bg-transparent px-4 font-semibold text-ink disabled:opacity-50;
+  }
+  .field {
+    @apply h-12 w-full rounded-lg border border-line-2 bg-bg px-3 text-ink outline-none focus:border-action;
+  }
+  .label {
+    @apply mb-1 block text-xs text-muted;
+  }
+  .card {
+    @apply rounded-xl border border-line p-3;
+  }
+}
