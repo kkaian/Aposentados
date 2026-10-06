@@ -6,6 +6,7 @@ import Admin from './pages/admin/Admin'
 import DefinirCapitaes from './pages/admin/DefinirCapitaes'
 import Diarista from './pages/admin/Diarista'
 import Sorteio from './pages/admin/Sorteio'
+import Caixa from './pages/admin/Caixa'
 import Cadastros from './pages/admin/Cadastros'
 import Kits from './pages/admin/Kits'
 import Exportar from './pages/admin/Exportar'
@@ -83,6 +84,7 @@ export default function App() {
           <Route path="peladas/:id/capitaes" element={<DefinirCapitaes />} />
           <Route path="sorteio" element={<Sorteio />} />
           <Route path="kits" element={<Kits />} />
+          <Route path="caixa" element={<Caixa />} />
           <Route path="exportar" element={<Exportar />} />
           <Route path="diarista" element={<Diarista />} />
         </Route>

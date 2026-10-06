@@ -130,6 +130,46 @@ try {
     return (await one(`select status from payments where charge_id = $1 and profile_id = $2`, [charge, id('j3')])).status
   })
 
+  // caixa
+  await expect('confirmar pagamento lança no caixa com quem recebeu', async () => {
+    await as(id('adm'))
+    const charge = (await one(`select id from charges where kind = 'mensalidade' and month = current_month()`)).id
+    await q(`select confirm_payment($1, $2, $3)`, [charge, id('j4'), id('dono')])
+    await q(`select confirm_payment($1, $2, $3)`, [charge, id('j4'), id('dono')])
+    const r = await one(`select count(*)::int n, min(amount)::text valor, bool_and(holder_id = $2) com_dono from cash_entries where charge_id = $1 and payer_id = $3 and voided_at is null`, [charge, id('dono'), id('j4')])
+    if (r.n !== 1) throw new Error(`${r.n} lançamentos`)
+    return `1 entrada de R$ ${r.valor}, com o dono: ${r.com_dono}`
+  })
+  await expect('desfazer confirmação estorna e volta para pendente', async () => {
+    const charge = (await one(`select id from charges where kind = 'mensalidade' and month = current_month()`)).id
+    await q(`select unconfirm_payment($1, $2, 'apertei errado')`, [charge, id('j4')])
+    const p = await one(`select status from payments where charge_id = $1 and profile_id = $2`, [charge, id('j4')])
+    const e = await one(`select void_reason from cash_entries where charge_id = $1 and payer_id = $2`, [charge, id('j4')])
+    return `pagamento ${p.status}, lançamento estornado: "${e.void_reason}"`
+  })
+  await expect('gasto e transferência entre admins', async () => {
+    await q(`select cash_add('saida', 'Society', 120, $1)`, [id('adm')])
+    await q(`select cash_add('transferencia', 'Repasse', 30, $1, $2)`, [id('dono'), id('adm')])
+    return 'ok'
+  })
+  await expect('dinheiro só fica com admin ou dono', () => q(`select cash_add('entrada', 'Doação', 10, $1)`, [id('j5')]), true)
+  await expect('saldo por admin (entradas - saídas ± transferências)', async () => {
+    const r = await q(`
+      select p.username,
+        coalesce(sum(case when e.kind = 'entrada' and e.holder_id = p.id then e.amount
+                          when e.kind = 'saida' and e.holder_id = p.id then -e.amount
+                          when e.kind = 'transferencia' and e.holder_id = p.id then -e.amount
+                          when e.kind = 'transferencia' and e.to_holder_id = p.id then e.amount else 0 end), 0)::text saldo
+      from profiles p left join cash_entries e on e.voided_at is null and p.id in (e.holder_id, e.to_holder_id)
+      where p.role in ('dono','admin') group by p.username order by 1`)
+    return r.rows.map((x) => `${x.username}=${x.saldo}`).join(', ')
+  })
+  await as(id('j1'))
+  await expect('jogador não vê o caixa', async () => { const r = await q(`select count(*)::int n from cash_entries`); if (r.rows[0].n) throw new Error('viu'); return 'invisível' })
+  await expect('ninguém lança direto na tabela', () => q(`insert into cash_entries (kind, category, description, amount, holder_id) values ('entrada','avulsa','x',1,$1)`, [id('j1')]), true)
+  await as(id('adm'))
+  await expect('nem admin apaga lançamento (só estorna)', () => q(`delete from cash_entries`), true)
+
   // notas
   await as(id('j1'))
   await expect('mensalista avalia colega', () => q(`insert into ratings (rater_id, rated_id, dribble, shot, speed, overall) values ($1,$2,4,4,4,4)`, [id('j1'), id('j2')]))
@@ -178,6 +218,11 @@ try {
     await q(`select replace_member($1, null, 'Zé Avulso')`, [m.id])
     const r = await one(`select count(*) filter (where is_out)::int fora, count(*) filter (where guest_id is not null)::int avulsos from team_members where pelada_id=$1`, [pel2])
     return JSON.stringify(r)
+  })
+  await expect('diarista que pagou para jogar entra no caixa', async () => {
+    const m = await one(`select id from team_members where pelada_id = $1 and profile_id = $2 and not is_out`, [pel2, id('j6')])
+    await q(`select replace_member($1, null, 'Primo do Zé', 25, $2)`, [m.id, id('adm')])
+    return (await one(`select description, amount::text from cash_entries where category = 'diarista' and voided_at is null`)).description
   })
   await expect('sorteio de dia atípico substitui os times', async () => {
     await q(`select save_sorteio($1, $2)`, [pel2, JSON.stringify([[id('j1'), id('j2'), id('j3')], [id('j4'), id('j5'), id('j6')]])])

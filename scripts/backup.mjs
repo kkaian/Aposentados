@@ -9,7 +9,7 @@ const TABLES = [
   'profiles', 'invites', 'password_requests', 'app_settings', 'kits', 'kit_suggestions',
   'peladas', 'pelada_helpers', 'pelada_diaristas', 'guests', 'presence',
   'teams', 'team_members', 'drafts', 'games', 'game_lineup', 'game_events',
-  'ratings', 'charges', 'payments',
+  'ratings', 'charges', 'payments', 'cash_entries',
 ]
 
 const esc = (v) => {

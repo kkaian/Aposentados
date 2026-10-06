@@ -180,3 +180,12 @@ Estas decisões valem sobre o texto acima e sobre os wireframes.
 - **Sorteio equilibrado:** jogador sem overall (menos de 3 avaliações) conta como 3.
 - **Senha temporária:** o admin gera no app (Admin → Cadastros) e passa por fora; o jogador é obrigado a criar a dele no próximo acesso.
 - **Backup:** GitHub Action a cada 3 dias, criptografado (o repositório é público).
+
+## 13. Caixa (só admins)
+
+- Entradas, gastos e saldo do mês, com saldo acumulado de um mês para o outro.
+- Toda entrada diz com qual admin/dono o dinheiro ficou; todo gasto, quem pagou. O caixa mostra quanto cada um tem.
+- Confirmar mensalidade ou cotinha lança a entrada sozinha (escolhendo quem recebeu). "Desfazer" estorna e volta o pagamento para pendente.
+- Diarista que entra no lugar de mensalista pode ter pago para jogar: valor e quem recebeu entram no caixa.
+- Lançamentos manuais: entrada avulsa, gasto (nome e valor) e repasse entre admins (não muda o total).
+- Auditável: nada é apagado; estorno guarda motivo, quem e quando. Exporta CSV do mês.

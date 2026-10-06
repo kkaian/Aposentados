@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import HolderSelect from '../../components/HolderSelect'
 import { AdminBadge, Notice, SectionLabel, Segmented, Spinner } from '../../components/ui'
+import { useAuth } from '../../lib/auth'
+import { useHolders } from '../../lib/holders'
 import { friendlyError } from '../../lib/errors'
 import { fetchActivePlayers, fetchCurrentPelada } from '../../lib/peladas'
 import { supabase } from '../../lib/supabase'
@@ -9,6 +12,11 @@ import { fetchTeams } from '../../lib/teams'
 // Substituição integral: alguém de fora entra no lugar de um jogador do time
 export default function Diarista() {
   const navigate = useNavigate()
+  const { profile } = useAuth()
+  const holders = useHolders()
+  const [paid, setPaid] = useState(false)
+  const [amount, setAmount] = useState('')
+  const [holder, setHolder] = useState(profile.id)
   const [pelada, setPelada] = useState()
   const [teams, setTeams] = useState([])
   const [diaristas, setDiaristas] = useState([])
@@ -39,7 +47,7 @@ export default function Diarista() {
   const team = teams.find((t) => t.id === teamId)
   const outMember = team?.active.find((m) => m.id === outId)
   const inName = mode === 'avulso' ? guestName.trim() : diaristas.find((d) => d.id === inId)?.name
-  const ready = outMember && inName
+  const ready = outMember && inName && (!paid || Number(amount) > 0)
 
   async function confirm() {
     setBusy(true)
@@ -48,6 +56,8 @@ export default function Diarista() {
       p_member: outMember.id,
       p_profile: mode === 'cadastrado' ? inId : null,
       p_guest_name: mode === 'avulso' ? guestName.trim() : null,
+      p_paid: paid ? Number(amount) : null,
+      p_holder: paid ? holder : null,
     })
     setBusy(false)
     if (error) setError(friendlyError(error))
@@ -107,9 +117,25 @@ export default function Diarista() {
         </div>
       )}
 
+      <SectionLabel>Pagamento</SectionLabel>
+      <label className="flex min-h-12 items-center gap-3 px-4">
+        <input type="checkbox" className="h-5 w-5 accent-action" checked={paid} onChange={(e) => setPaid(e.target.checked)} />
+        <span className="flex-1">Ele pagou para jogar</span>
+      </label>
+      {paid && (
+        <div className="grid grid-cols-2 gap-3 px-4 pt-1">
+          <div>
+            <label className="label" htmlFor="paid">Quanto pagou (R$)</label>
+            <input id="paid" className="field" type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </div>
+          <HolderSelect holders={holders} value={holder} onChange={setHolder} label="Quem recebeu" />
+        </div>
+      )}
+
       {ready && (
         <div className="card mx-4 mt-4 text-sm">
           {inName} entra no {team.label} no lugar de {outMember.name}.
+          {paid && ` Pagou ${Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}, que entra no caixa.`}
         </div>
       )}
       <div className="space-y-2 px-4 pt-4">

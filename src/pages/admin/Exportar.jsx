@@ -52,6 +52,11 @@ const EXPORTS = [
     const who = (pid, gid) => (pid ? p[pid] : gid ? `${g[gid]} (avulso)` : '')
     return events.map((e) => ({ jogo: e.game_id, minuto: e.minute, tipo: e.type, jogador: who(e.player_id, e.player_guest_id), assistencia: who(e.assist_id, e.assist_guest_id), entrou: who(e.sub_in_id, e.sub_in_guest_id) }))
   }],
+  ['caixa', 'Caixa (todos os lançamentos)', async () => {
+    const [entries, people] = await Promise.all([all('cash_entries'), all('profiles', 'id, name')])
+    const p = Object.fromEntries(people.map((x) => [x.id, x.name]))
+    return entries.map((e) => ({ data: e.date, tipo: e.kind, categoria: e.category, descricao: e.description, valor: e.amount, com: p[e.holder_id], para: p[e.to_holder_id] ?? '', lancado_por: p[e.created_by], estornado: e.voided_at ? `${e.void_reason ?? 'sim'} (${p[e.voided_by]})` : '' }))
+  }],
   ['pagamentos', 'Pagamentos', async () => {
     const [charges, payments, people] = await Promise.all([all('charges'), all('payments'), all('profiles', 'id, name')])
     const c = Object.fromEntries(charges.map((x) => [x.id, x]))

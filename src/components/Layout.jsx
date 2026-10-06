@@ -4,6 +4,7 @@ import {
   Download,
   History,
   House,
+  Landmark,
   LogOut,
   Menu,
   Settings,
@@ -44,6 +45,7 @@ const MENU = [
 
 const ADMIN_MENU = [
   { to: '/admin', label: 'Administração', icon: Settings },
+  { to: '/admin/caixa', label: 'Caixa', icon: Landmark },
   { to: '/admin/sorteio', label: 'Sorteio de times', icon: Shuffle },
   { to: '/admin/diarista', label: 'Adicionar diarista', icon: UserPlus },
 ]

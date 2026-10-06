@@ -1,11 +1,13 @@
 import { Copy, Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import Avatar from '../components/Avatar'
+import HolderSelect from '../components/HolderSelect'
 import Sheet from '../components/Sheet'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
 import { monthName, todayISO } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
+import { useHolders } from '../lib/holders'
 import { photoUrl } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 
@@ -30,6 +32,8 @@ export default function Pagamentos() {
   const [msg, setMsg] = useState({})
   const [busy, setBusy] = useState(null)
   const [sheet, setSheet] = useState(null)
+  const [confirmFor, setConfirmFor] = useState(null)
+  const holders = useHolders()
 
   const load = useCallback(async () => {
     await supabase.rpc('ensure_current_fee')
@@ -161,7 +165,7 @@ export default function Pagamentos() {
                   {chargeById[p.charge_id]?.kind === 'mensalidade' ? `Mensalidade de ${monthName(chargeById[p.charge_id].month)}` : chargeById[p.charge_id]?.title}
                 </div>
               </div>
-              <button className="btn h-9 px-3 text-sm" disabled={busy !== null} onClick={() => run(`c${p.charge_id}${p.profile_id}`, 'confirm_payment', { p_charge: p.charge_id, p_profile: p.profile_id })}>
+              <button className="btn h-9 px-3 text-sm" disabled={busy !== null} onClick={() => setConfirmFor({ charge: chargeById[p.charge_id], profile: playerById[p.profile_id], holder: profile.id })}>
                 Confirmar
               </button>
             </div>
@@ -202,9 +206,16 @@ export default function Pagamentos() {
               <div key={m.id} className="flex min-h-12 items-center gap-3 border-b border-row">
                 <span className="flex-1">{m.name}</span>
                 <StatusPill status={st} late={isLate(sheet.charge, st)} />
-                {st !== 'confirmado' && (
-                  <button className="h-9 px-2 text-sm font-semibold text-action" onClick={() => run(`q${m.id}`, 'confirm_payment', { p_charge: sheet.charge.id, p_profile: m.id })}>
+                {st !== 'confirmado' ? (
+                  <button className="h-9 px-2 text-sm font-semibold text-action" onClick={() => setConfirmFor({ charge: sheet.charge, profile: m, holder: profile.id })}>
                     Confirmar
+                  </button>
+                ) : (
+                  <button
+                    className="h-9 px-2 text-sm text-muted"
+                    onClick={() => run(`u${m.id}`, 'unconfirm_payment', { p_charge: sheet.charge.id, p_profile: m.id, p_reason: 'Confirmação desfeita' }, `Pagamento de ${m.name} voltou para pendente.`)}
+                  >
+                    Desfazer
                   </button>
                 )}
               </div>
@@ -213,6 +224,31 @@ export default function Pagamentos() {
         </Sheet>
       )}
       {sheet?.kind === 'cotinha' && <CotinhaSheet onClose={() => setSheet(null)} onSaved={load} />}
+
+      {confirmFor && (
+        <Sheet
+          title={`Confirmar pagamento de ${confirmFor.profile?.name}`}
+          subtitle={`${confirmFor.charge.kind === 'mensalidade' ? `Mensalidade de ${monthName(confirmFor.charge.month)}` : confirmFor.charge.title} · ${money(confirmFor.charge.amount)}. Entra no caixa.`}
+          onClose={() => setConfirmFor(null)}
+        >
+          <HolderSelect holders={holders} value={confirmFor.holder} onChange={(h) => setConfirmFor((c) => ({ ...c, holder: h }))} label="Quem recebeu o dinheiro" />
+          <button
+            className="btn mt-3 w-full"
+            disabled={busy !== null}
+            onClick={() => {
+              const c = confirmFor
+              setConfirmFor(null)
+              run('confirm', 'confirm_payment', { p_charge: c.charge.id, p_profile: c.profile.id, p_holder: c.holder }, `Pagamento de ${c.profile.name} confirmado e lançado no caixa.`)
+            }}
+          >
+            Confirmar e lançar no caixa
+          </button>
+          <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setConfirmFor(null)}>
+            Cancelar
+          </button>
+          <p className="text-xs text-muted">Apertou errado? Em "Ver quem está em dia", toque em Desfazer.</p>
+        </Sheet>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronRight, Download, Shield, Ticket, UserCheck, Users, Wallet, BadgeDollarSign } from 'lucide-react'
+import { CalendarDays, Landmark, ChevronRight, Download, Shield, Ticket, UserCheck, Users, Wallet, BadgeDollarSign } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AdminBadge } from '../../components/ui'
@@ -27,6 +27,7 @@ export default function Admin() {
     { to: '/admin/peladas', icon: CalendarDays, title: 'Peladas', sub: 'Criar, editar e definir ajudantes' },
     { to: '/admin/mensalistas', icon: BadgeDollarSign, title: 'Mensalistas e cota', sub: 'Valor, vencimento e vagas' },
     { to: '/admin/cadastros', icon: Ticket, title: 'Código de convite', sub: 'Ver, copiar ou gerar um novo' },
+    { to: '/admin/caixa', icon: Landmark, title: 'Caixa', sub: 'Entradas, gastos e com quem está o dinheiro' },
     { to: '/pagamentos', icon: Wallet, title: 'Pagamentos', sub: 'Confirmar Pix e cotinhas' },
     { to: '/admin/kits', icon: Shield, title: 'Nomes e escudos', sub: 'Kits e criação pelos capitães' },
     { to: '/admin/exportar', icon: Download, title: 'Exportar dados', sub: 'Planilha CSV de gols, peladas e pagamentos' },
