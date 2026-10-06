@@ -16,6 +16,8 @@ const RATING_ROWS = [
   ['dribble', 'Drible'],
   ['shot', 'Chute'],
   ['speed', 'Velocidade'],
+  ['defense', 'Defesa'],
+  ['passing', 'Passe'],
   ['overall', 'Overall'],
 ]
 
@@ -122,8 +124,8 @@ function RatingsBlock({ profileId }) {
       {RATING_ROWS.map(([k, l]) => (
         <div key={k} className="flex h-10 items-center gap-3 text-sm">
           <span className="w-24">{l}</span>
-          <Stars value={enough ? Number(summary[k]) : 0} />
-          <span className="ml-auto text-muted">{enough ? Number(summary[k]).toFixed(1).replace('.', ',') : '–'}</span>
+          <Stars value={enough && summary[k] != null ? Number(summary[k]) : 0} />
+          <span className="ml-auto text-muted">{enough && summary[k] != null ? Number(summary[k]).toFixed(1).replace('.', ',') : '–'}</span>
         </div>
       ))}
       {summary && !enough && (

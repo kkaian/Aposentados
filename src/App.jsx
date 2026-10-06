@@ -20,6 +20,7 @@ import EsqueciSenha from './pages/EsqueciSenha'
 import EncerrarPelada from './pages/EncerrarPelada'
 import Historico from './pages/Historico'
 import Inicio from './pages/Inicio'
+import Jogadores from './pages/Jogadores'
 import Jogo from './pages/Jogo'
 import Login from './pages/Login'
 import MeuTime from './pages/MeuTime'
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/" element={<Inicio />} />
         <Route path="/perfil" element={<Perfil />} />
         <Route path="/jogador/:id" element={<Perfil />} />
+        <Route path="/jogadores" element={<Jogadores />} />
         <Route path="/presenca" element={<Presenca />} />
         <Route path="/presenca/:id" element={<Presenca />} />
         <Route path="/pelada" element={<PeladaHoje />} />

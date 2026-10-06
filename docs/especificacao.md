@@ -19,7 +19,7 @@ Site instalável (PWA) para a pelada: registra jogos, gols, assistências e cart
 
 ## 3. Visual
 
-Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#243256`, texto `#E6EAF2`, texto apagado `#8D9AB8`, azul de ação `#3D78FF`, prata `#D8DEE9`. Medalhas: ouro `#D9B44A`, prata `#C0C7D1`, bronze `#B87B4B`. Fonte Barlow. Cores disponíveis para os times (lista fixa, ver seção 11). Navegação: menu hambúrguer + barra inferior (Início, Pelada, Pagamentos, Perfil). Gerar o ícone do PWA (quadrado) a partir do escudo.
+Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#243256`, texto `#E6EAF2`, texto apagado `#8D9AB8`, azul de ação `#3D78FF`, prata `#D8DEE9`. Medalhas: ouro `#D9B44A`, prata `#C0C7D1`, bronze `#B87B4B`. Fonte Barlow. Cores disponíveis para os times (lista fixa, ver seção 11). Navegação: menu hambúrguer + barra inferior (Início, Pelada, Pagamentos, Jogadores). O próprio perfil abre pela foto no topo. Gerar o ícone do PWA (quadrado) a partir do escudo.
 
 ## 4. Papéis e tipos de jogador
 
@@ -52,7 +52,7 @@ Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#
 - **Artilheiro, Garçom (assistências) e Mais vitórias:** só o 1º lugar.
 - **Seleção do mês:** o time com mais vitórias em uma pelada do mês. Desempate pelo time com mais gols; se empatar de novo, os dois levam. Todos que estavam no time nessa pelada ganham.
 
-**Notas:** drible, chute, velocidade e overall, em 1 a 5 estrelas (estilo Uber). Voto anônimo, sem votar em si mesmo. Opcional: o jogador avalia só quem quiser. Cada avaliador edita suas avaliações **1 vez por mês**; a nota anterior continua valendo. Média = voto mais recente de cada pessoa. Mostrar a média só com 3 ou mais avaliações.
+**Notas:** drible, chute, velocidade, defesa, passe e overall, em 1 a 5 estrelas (estilo Uber). Voto anônimo, sem votar em si mesmo. Opcional: o jogador avalia só quem quiser. Cada avaliador edita suas avaliações **1 vez por mês**; a nota anterior continua valendo. Média = voto mais recente de cada pessoa. Mostrar a média só com 3 ou mais avaliações.
 
 **Times da pelada** (refeitos a cada pelada):
 1. Em cada pelada, o admin escolhe 4 capitães entre os mensalistas. A ordem em que os define é a ordem dos capitães (1 a 4).

@@ -14,6 +14,7 @@ import {
   Trophy,
   User,
   UserPlus,
+  Users,
   Wallet,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -30,12 +31,13 @@ const TABS = [
   { to: '/', label: 'Início', icon: Trophy },
   { to: '/pelada', label: 'Pelada', icon: CalendarDays },
   { to: '/pagamentos', label: 'Pagamentos', icon: Wallet },
-  { to: '/perfil', label: 'Perfil', icon: User },
+  { to: '/jogadores', label: 'Jogadores', icon: Users },
 ]
 
 const MENU = [
   { to: '/', label: 'Início', icon: House },
   { to: '/pelada', label: 'Pelada de hoje', icon: CalendarDays },
+  { to: '/jogadores', label: 'Jogadores', icon: Users },
   { to: '/historico', label: 'Histórico', icon: History },
   { to: '/times', label: 'Times da pelada', icon: Shirt },
   { to: '/notas', label: 'Avaliar colegas', icon: Star },

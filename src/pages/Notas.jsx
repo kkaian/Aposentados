@@ -12,6 +12,8 @@ const RATING_FIELDS = [
   ['dribble', 'Drible'],
   ['shot', 'Chute'],
   ['speed', 'Velocidade'],
+  ['defense', 'Defesa'],
+  ['passing', 'Passe'],
   ['overall', 'Overall'],
 ]
 
@@ -66,7 +68,8 @@ export function AvaliarLista() {
       <div className="pt-2">
         {players.map((p) => {
           const r = mine[p.id]
-          const locked = r && monthOfTimestamp(r.updated_at) === thisMonth
+          const incomplete = r && (r.defense == null || r.passing == null)
+          const locked = r && !incomplete && monthOfTimestamp(r.updated_at) === thisMonth
           return (
             <Link key={p.id} to={`/notas/${p.id}`} className="flex min-h-16 items-center gap-3 border-b border-row px-4 active:bg-surface-2">
               <Avatar name={p.name} src={photoUrl(p.photo_path)} />
@@ -74,7 +77,7 @@ export function AvaliarLista() {
                 <div className="truncate">{p.name}</div>
                 {r ? <MiniStars value={r.overall} /> : <span className="text-xs text-muted">ainda não avaliado</span>}
               </div>
-              <span className={`text-sm font-semibold ${locked ? 'text-muted' : 'text-action'}`}>{locked ? 'Mudou este mês' : r ? 'Alterar' : 'Avaliar'}</span>
+              <span className={`text-sm font-semibold ${locked ? 'text-muted' : 'text-action'}`}>{incomplete ? 'Completar' : locked ? 'Mudou este mês' : r ? 'Alterar' : 'Avaliar'}</span>
             </Link>
           )
         })}
@@ -90,7 +93,7 @@ export function Votar() {
   const { profile } = useAuth()
   const [player, setPlayer] = useState()
   const [current, setCurrent] = useState(null)
-  const [values, setValues] = useState({ dribble: 0, shot: 0, speed: 0, overall: 0 })
+  const [values, setValues] = useState({ dribble: 0, shot: 0, speed: 0, defense: 0, passing: 0, overall: 0 })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -101,7 +104,7 @@ export function Votar() {
     ]).then(([p, r]) => {
       setPlayer(p.data)
       setCurrent(r.data)
-      if (r.data) setValues({ dribble: r.data.dribble, shot: r.data.shot, speed: r.data.speed, overall: r.data.overall })
+      if (r.data) setValues(Object.fromEntries(RATING_FIELDS.map(([k]) => [k, r.data[k] ?? 0])))
     })
   }, [id, profile.id])
 
@@ -112,7 +115,8 @@ export function Votar() {
   }
 
   const thisMonth = monthStart(todayISO())
-  const locked = current && monthOfTimestamp(current.updated_at) === thisMonth
+  const incomplete = current && (current.defense == null || current.passing == null)
+  const locked = current && !incomplete && monthOfTimestamp(current.updated_at) === thisMonth
   const complete = RATING_FIELDS.every(([k]) => values[k] > 0)
 
   async function save() {
@@ -131,7 +135,9 @@ export function Votar() {
         <Avatar name={player.name} src={photoUrl(player.photo_path)} size={72} />
         <b className="mt-2 text-lg">{player.name}</b>
         <div className="text-xs text-muted">
-          {current
+          {incomplete
+            ? 'Faltam as notas de defesa e passe. Completar não conta como a mudança do mês.'
+            : current
             ? locked
               ? `Você já mudou esta nota em ${monthName(thisMonth)}. Volte no mês que vem.`
               : `Sua nota atual (desde ${monthName(monthOfTimestamp(current.updated_at))}). Mude só se quiser.`
