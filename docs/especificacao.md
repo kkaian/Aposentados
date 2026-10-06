@@ -189,3 +189,9 @@ Estas decisões valem sobre o texto acima e sobre os wireframes.
 - Diarista que entra no lugar de mensalista pode ter pago para jogar: valor e quem recebeu entram no caixa.
 - Lançamentos manuais: entrada avulsa, gasto (nome e valor) e repasse entre admins (não muda o total).
 - Auditável: nada é apagado; estorno guarda motivo, quem e quando. Exporta CSV do mês.
+
+## 14. Vagas de diarista e empréstimo
+
+- Quando acabam os jogadores disponíveis, o capitão da vez escolhe "Vaga de diarista" (só quando não sobra ninguém). Prazo vencido ou horário da pelada: vira vaga sozinho. Cada time fecha com 5.
+- No dia, admin ou ajudante preenche a vaga: avulso, diarista com conta ou mensalista de última hora, com "pagou para jogar" indo para o caixa. Vaga não preenchida não entra em campo.
+- Substituição parcial e "Emprestar jogador" (sem tirar ninguém) aceitam alguém de outro time; vale só naquele jogo, e no próximo jogo do time dele ele volta para o time original.

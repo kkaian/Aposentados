@@ -21,9 +21,9 @@ export async function fetchTeams(peladaId) {
       .filter((m) => m.team_id === t.id)
       .map((m) => ({
         ...m,
-        name: m.profile_id ? (people[m.profile_id]?.name ?? 'Jogador') : (guestById[m.guest_id]?.name ?? 'Avulso'),
+        name: m.is_slot ? 'Vaga de diarista' : m.profile_id ? (people[m.profile_id]?.name ?? 'Jogador') : (guestById[m.guest_id]?.name ?? 'Avulso'),
         photo_path: m.profile_id ? people[m.profile_id]?.photo_path : null,
-        type: m.profile_id ? people[m.profile_id]?.type : 'avulso',
+        type: m.is_slot ? 'vaga' : m.profile_id ? people[m.profile_id]?.type : 'avulso',
       }))
       .sort((a, b) => b.is_captain - a.is_captain || (a.pick_number ?? 99) - (b.pick_number ?? 99))
     const captain = t.captain_id ? people[t.captain_id] : null

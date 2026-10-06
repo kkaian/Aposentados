@@ -89,7 +89,7 @@ export default function Diarista() {
       </div>
 
       <SectionLabel>Quem fica de fora?</SectionLabel>
-      {team?.active.map((m) => (
+      {team?.active.filter((m) => !m.is_slot).map((m) => (
         <label key={m.id} className="flex min-h-12 items-center gap-3 border-b border-row px-4">
           <input type="radio" name="out" className="h-5 w-5 accent-action" checked={outId === m.id} onChange={() => setOutId(m.id)} />
           <span className="flex-1">{m.name}</span>

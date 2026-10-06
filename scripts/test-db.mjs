@@ -197,6 +197,7 @@ try {
   await as(id('j3')); await q(`select draft_pick($1,$2)`, [pel2, id('j7')])
   await as(id('j4')); await q(`select draft_pick($1,$2)`, [pel2, id('j8')])
   await expect('rodada 2 começa pelo capitão 4 (1234 · 4123)', async () => { await as(id('j4')); await q(`select draft_pick($1,$2)`, [pel2, id('j9')]); return 'ok' })
+  await expect('vaga de diarista não pode enquanto há disponíveis', async () => { await as(id('j1')); return q(`select draft_pick_slot($1)`, [pel2]) }, true)
   await expect('fim das 24 h: turnos de 10 min e sorteio automático', async () => {
     await as(null)
     await q(`update drafts set free_until = now() - interval '25 minutes' where pelada_id=$1`, [pel2])
@@ -205,7 +206,54 @@ try {
     const auto = await one(`select count(*)::int n from team_members where pelada_id=$1 and source='sorteio'`, [pel2])
     return `fase=${d.phase}, próxima escolha=${d.next_pick}, sorteados=${auto.n}`
   })
-  await expect('sem disponíveis, a escolha termina', async () => (await one(`select phase from drafts where pelada_id=$1`, [pel2])).phase)
+  await expect('sem disponíveis, capitão da vez escolhe vaga de diarista', async () => {
+    await as(id('j2'))
+    await q(`select draft_pick_slot($1)`, [pel2])
+    return (await one(`select count(*)::int n from team_members where pelada_id=$1 and is_slot`, [pel2])).n + ' vaga'
+  })
+  await expect('prazo vencido sem ninguém vira vaga sozinho', async () => {
+    await as(null)
+    await q(`update drafts set turn_deadline = now() - interval '1 minute' where pelada_id=$1`, [pel2])
+    await q(`select draft_tick()`)
+    return (await one(`select count(*)::int n from team_members where pelada_id=$1 and is_slot`, [pel2])).n + ' vagas'
+  })
+  await expect('no horário da pelada, o resto vira vaga e cada time fecha com 5', async () => {
+    await q(`update peladas set date = current_date - 1 where id=$1`, [pel2])
+    await q(`select draft_tick()`)
+    await q(`update peladas set date = '2026-10-18' where id=$1`, [pel2])
+    const d = await one(`select phase from drafts where pelada_id=$1`, [pel2])
+    const r = await q(`select count(*)::int n from team_members where pelada_id=$1 group by team_id order by 1`, [pel2])
+    return `fase=${d.phase}, por time: ${r.rows.map((x) => x.n).join(',')}`
+  })
+  await expect('ajudante preenche vaga com avulso que pagou (vai pro caixa)', async () => {
+    await as(id('adm'))
+    await q(`insert into pelada_helpers values ($1,$2)`, [pel2, id('j8')])
+    await as(id('j8'))
+    const slot = await one(`select id from team_members where pelada_id=$1 and is_slot order by id limit 1`, [pel2])
+    await q(`select fill_slot($1, null, 'Juninho', 20, $2)`, [slot.id, id('adm')])
+    const r = await one(`select (select count(*)::int from team_members where pelada_id=$1 and is_slot) vagas, (select count(*)::int from guests where pelada_id=$1 and name='Juninho') avulso`, [pel2])
+    return JSON.stringify(r)
+  })
+  await expect('vaga não aceita quem já está em time', async () => {
+    const slot = await one(`select id from team_members where pelada_id=$1 and is_slot order by id limit 1`, [pel2])
+    return q(`select fill_slot($1, $2, null)`, [slot.id, id('j5')])
+  }, true)
+  await expect('jogo começa sem as vagas vazias e aceita jogador emprestado', async () => {
+    await as(id('adm'))
+    const t1 = await team(1)
+    const t3 = await team(3)
+    const g = (await one(`select set_next_game($1,$2,$3) id`, [pel2, t1, t3])).id
+    await q(`select start_game($1)`, [g])
+    const before = (await one(`select count(*)::int n from game_lineup where game_id=$1`, [g])).n
+    await q(`select lend_player($1,$2,null,'Emprestado')`, [g, t3])
+    const after = (await one(`select count(*)::int n from game_lineup where game_id=$1`, [g])).n
+    await q(`select finish_game($1)`, [g])
+    return `em campo ${before} -> ${after}`
+  })
+  await expect('vaga cheia: troca integral usa outro caminho', async () => {
+    const slot = await one(`select id from team_members where pelada_id=$1 and is_slot order by id limit 1`, [pel2])
+    return q(`select replace_member($1, null, 'X')`, [slot.id])
+  }, true)
   await as(id('j1'))
   const kit = (await one(`select id from kits order by id limit 1`)).id
   await expect('capitão escolhe kit e cor', async () => q(`select choose_identity($1,$2,'verde')`, [await team(1), kit]))
@@ -226,6 +274,9 @@ try {
     return (await one(`select description, amount::text from cash_entries where category = 'diarista' and voided_at is null`)).description
   })
   await expect('sorteio de dia atípico substitui os times', async () => {
+    await as(null)
+    await q(`delete from games where pelada_id = $1`, [pel2])
+    await as(id('adm'))
     await q(`select save_sorteio($1, $2)`, [pel2, JSON.stringify([[id('j1'), id('j2'), id('j3')], [id('j4'), id('j5'), id('j6')]])])
     return JSON.stringify(await one(`select count(*)::int times, (select count(*)::int from team_members where pelada_id=$1) jogadores from teams where pelada_id=$1`, [pel2]))
   })

@@ -153,6 +153,11 @@ export default function Jogo() {
           </button>
         ))}
         {inField(team?.id).length === 0 && game.status === 'agendado' && <div className="text-xs text-muted">Elenco entra ao iniciar o jogo.</div>}
+        {game.status === 'ao_vivo' && (isRecorder || isAdmin || helperIds.includes(profile.id)) && (
+          <button className="mt-1 h-9 w-full rounded-lg border border-dashed border-line-2 text-xs font-semibold text-action" onClick={() => setSheet({ kind: 'lend', team })}>
+            + Emprestar jogador
+          </button>
+        )}
       </div>
   )
 
@@ -328,6 +333,27 @@ export default function Jogo() {
         />
       )}
 
+      {sheet?.kind === 'lend' && (
+        <LendSheet
+          team={sheet.team}
+          lineup={lineup}
+          profiles={profiles}
+          guests={guests}
+          onClose={() => setSheet(null)}
+          onConfirm={async (choice) => {
+            const { error } = await supabase.rpc('lend_player', {
+              p_game: game.id,
+              p_team: sheet.team.id,
+              p_profile: choice.profile_id ?? null,
+              p_guest_name: choice.profile_id ? null : choice.name,
+            })
+            if (error) setMsg(friendlyError(error))
+            setSheet(null)
+            load()
+          }}
+        />
+      )}
+
       {sheet?.kind === 'resp' && (
         <Sheet title={`Registro do jogo ${game.number}`} subtitle={recorder ? `${recorder.name} · registrando desde ${new Date(game.recorder_since).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Ninguém registrando agora.'} onClose={() => setSheet(null)}>
           {(isRecorder || isAdmin) && (
@@ -420,7 +446,44 @@ export default function Jogo() {
   )
 }
 
-// Substituição parcial: quem entra pode ser mensalista, diarista ou avulso
+// Emprestar: alguém de outro time (ou avulso) completa o time só neste jogo
+function LendSheet({ team, lineup, profiles, guests, onClose, onConfirm }) {
+  const [choice, setChoice] = useState(null)
+  const [guestName, setGuestName] = useState('')
+  const fieldKeys = new Set(lineup.filter((l) => l.left_minute == null).map((l) => keyOf(l.profile_id, l.guest_id)))
+  const options = [
+    ...profiles.filter((p) => !fieldKeys.has(keyOf(p.id))).map((p) => ({ key: keyOf(p.id), profile_id: p.id, name: p.name, sub: p.type })),
+    ...guests.filter((g) => !fieldKeys.has(keyOf(null, g.id))).map((g) => ({ key: keyOf(null, g.id), name: g.name, sub: 'avulso' })),
+  ]
+  const ready = choice === 'novo' ? guestName.trim() : choice
+
+  return (
+    <Sheet title={`Emprestar para ${team.label}`} subtitle="Entra só neste jogo, sem tirar ninguém (lesão, time com menos gente). No próximo jogo do time dele, ele volta para o time original." onClose={onClose}>
+      <div className="max-h-[40dvh] overflow-y-auto">
+        {options.map((o) => (
+          <label key={o.key} className="flex min-h-12 items-center gap-3 border-b border-row">
+            <input type="radio" name="lend" className="h-5 w-5 accent-action" checked={choice?.key === o.key} onChange={() => setChoice(o)} />
+            <span className="flex-1">{o.name}</span>
+            <span className="text-xs text-muted">{o.sub}</span>
+          </label>
+        ))}
+        <label className="flex min-h-12 items-center gap-3">
+          <input type="radio" name="lend" className="h-5 w-5 accent-action" checked={choice === 'novo'} onChange={() => setChoice('novo')} />
+          <span className="flex-1 text-action">+ Avulso, sem conta</span>
+        </label>
+      </div>
+      {choice === 'novo' && <input className="field mt-2" placeholder="Nome do avulso" maxLength={40} value={guestName} onChange={(e) => setGuestName(e.target.value)} />}
+      <button className="btn mt-3 w-full" disabled={!ready} onClick={() => onConfirm(choice === 'novo' ? { name: guestName.trim() } : choice)}>
+        Colocar em campo
+      </button>
+      <button className="mt-2 h-11 w-full text-sm text-muted" onClick={onClose}>
+        Cancelar
+      </button>
+    </Sheet>
+  )
+}
+
+// Substituição parcial: quem entra pode ser mensalista, diarista, avulso ou alguém de outro time
 function SubSheet({ person, name, lineup, profiles, guests, busy, onClose, onConfirm }) {
   const [choice, setChoice] = useState(null)
   const [guestName, setGuestName] = useState('')
@@ -432,7 +495,7 @@ function SubSheet({ person, name, lineup, profiles, guests, busy, onClose, onCon
   const ready = choice === 'novo' ? guestName.trim() : choice
 
   return (
-    <Sheet title="Substituição parcial" subtitle={`Sai: ${name(person.profile_id, person.guest_id)}`} onClose={onClose}>
+    <Sheet title="Substituição parcial" subtitle={`Sai: ${name(person.profile_id, person.guest_id)}. Pode entrar alguém de outro time: no próximo jogo do time dele, ele volta para o time original.`} onClose={onClose}>
       <div className="mb-1 text-sm font-semibold">Entra</div>
       <div className="max-h-[40dvh] overflow-y-auto">
         {options.map((o) => (

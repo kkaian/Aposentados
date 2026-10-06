@@ -2,6 +2,7 @@ import { Clock, Shirt, Users } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import FillSlotSheet from '../components/FillSlotSheet'
 import TeamCard from '../components/TeamCard'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
@@ -54,6 +55,8 @@ export default function Times() {
   const [available, setAvailable] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(null)
+  const [isHelper, setIsHelper] = useState(false)
+  const [fill, setFill] = useState(null)
   const ticking = useRef(false)
   const now = useNow()
 
@@ -61,7 +64,12 @@ export default function Times() {
     const p = await fetchCurrentPelada()
     setPelada(p ?? null)
     if (!p) return
-    const [t, { data: d }] = await Promise.all([fetchTeams(p.id), supabase.from('drafts').select('*').eq('pelada_id', p.id).maybeSingle()])
+    const [t, { data: d }, { data: h }] = await Promise.all([
+      fetchTeams(p.id),
+      supabase.from('drafts').select('*').eq('pelada_id', p.id).maybeSingle(),
+      supabase.from('pelada_helpers').select('profile_id').eq('pelada_id', p.id),
+    ])
+    setIsHelper((h ?? []).some((x) => x.profile_id === profile.id))
     setTeams(t)
     setDraft(d)
     if (d && d.phase !== 'concluida') {
@@ -76,7 +84,7 @@ export default function Times() {
         setAvailable((people ?? []).map((p) => ({ ...p, overall: overall[p.id] })).sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0) || a.name.localeCompare(b.name)))
       } else setAvailable([])
     } else setAvailable([])
-  }, [])
+  }, [profile.id])
 
   useEffect(() => {
     load()
@@ -104,6 +112,15 @@ export default function Times() {
       load()
     })
   }, [now, deadline, load])
+
+  async function pickSlot() {
+    setBusy('slot')
+    setError('')
+    const { error } = await supabase.rpc('draft_pick_slot', { p_pelada: pelada.id })
+    setBusy(null)
+    if (error) setError(friendlyError(error))
+    load()
+  }
 
   async function pick(player) {
     setBusy(player.id)
@@ -195,7 +212,7 @@ export default function Times() {
       <div className="grid grid-cols-2 gap-2 px-4 pt-3">
         {teams.map((t) => (
           <div key={t.id}>
-            <TeamCard team={t} slots={slots} />
+            <TeamCard team={t} slots={slots} onSlotClick={isAdmin || isHelper ? (slot, team) => setFill({ slot, team }) : undefined} />
             {isAdmin && t.captain_id !== profile.id && (
               <Link to={`/times/meu?time=${t.id}`} className="block py-1.5 text-center text-xs font-semibold text-action">
                 Editar kit e cor
@@ -219,7 +236,17 @@ export default function Times() {
       {drafting && (
         <>
           <SectionLabel>Disponíveis · {available.length}</SectionLabel>
-          {available.length === 0 && <div className="px-4 text-sm text-muted">Ninguém disponível. Só entra quem confirmou presença.</div>}
+          {available.length === 0 && (
+            <div className="px-4">
+              <div className="text-sm text-muted">Ninguém disponível. Só entra quem confirmou presença.</div>
+              {canPick && (
+                <button className="btn-outline mt-3 w-full" disabled={busy !== null} onClick={pickSlot}>
+                  Escolher vaga de diarista
+                </button>
+              )}
+              <p className="mt-2 text-xs text-muted">A vaga é preenchida no dia com quem aparecer: avulso, diarista com conta ou mensalista de última hora.</p>
+            </div>
+          )}
           {available.map((p) => (
             <div key={p.id} className="flex min-h-14 items-center gap-3 border-b border-row px-4">
               <Avatar name={p.name} src={photoUrl(p.photo_path)} />
@@ -239,6 +266,18 @@ export default function Times() {
             escolha, o app sorteia. Os times valem só para esta pelada.
           </p>
         </>
+      )}
+      {fill && (
+        <FillSlotSheet
+          slot={fill.slot}
+          team={fill.team}
+          teams={teams}
+          onClose={() => setFill(null)}
+          onDone={() => {
+            setFill(null)
+            load()
+          }}
+        />
       )}
     </div>
   )

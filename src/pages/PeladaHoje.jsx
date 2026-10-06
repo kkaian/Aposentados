@@ -1,6 +1,7 @@
 import { ChevronRight, Flag, Play, Plus, UserPlus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import FillSlotSheet from '../components/FillSlotSheet'
 import Sheet from '../components/Sheet'
 import TeamCard from '../components/TeamCard'
 import TeamShield from '../components/TeamShield'
@@ -76,6 +77,7 @@ export default function PeladaHoje() {
   const [present, setPresent] = useState(0)
   const [isHelper, setIsHelper] = useState(false)
   const [sheet, setSheet] = useState(false)
+  const [fill, setFill] = useState(null)
 
   const load = useCallback(async () => {
     const p = await fetchCurrentPelada()
@@ -159,7 +161,7 @@ export default function PeladaHoje() {
       ) : (
         <div className="grid grid-cols-2 gap-2 px-4">
           {teams.map((t) => (
-            <TeamCard key={t.id} team={t} />
+            <TeamCard key={t.id} team={t} onSlotClick={canManage && pelada.status !== 'encerrada' ? (slot, team) => setFill({ slot, team }) : undefined} />
           ))}
         </div>
       )}
@@ -208,6 +210,19 @@ export default function PeladaHoje() {
           </Link>
         )}
       </div>
+
+      {fill && (
+        <FillSlotSheet
+          slot={fill.slot}
+          team={fill.team}
+          teams={teams}
+          onClose={() => setFill(null)}
+          onDone={() => {
+            setFill(null)
+            load()
+          }}
+        />
+      )}
 
       {sheet && (
         <NextGameSheet
