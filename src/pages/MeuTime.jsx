@@ -5,6 +5,7 @@ import TeamShield from '../components/TeamShield'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
 import { DRAFT_ORDER, TEAM_COLORS } from '../lib/constants'
+import { todayISO } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
 import { fetchCurrentPelada } from '../lib/peladas'
 import { shieldUrl } from '../lib/storage'
@@ -39,10 +40,11 @@ export default function MeuTime() {
       ])
       const mine = teamId ? teams.find((t) => t.id === teamId) : teams.find((t) => t.captain_id === profile.id)
       // durante a escolha, o capitão só mexe em kit e cor na vez dele
-      const locked =
-        draft &&
-        draft.phase !== 'concluida' &&
-        (mine?.captain_id !== profile.id || DRAFT_ORDER.flat()[draft.next_pick - 1] !== mine?.captain_order)
+      const drafting = draft && draft.phase !== 'concluida'
+      const locked = drafting
+        ? (mine?.captain_id !== profile.id || DRAFT_ORDER.flat()[draft.next_pick - 1] !== mine?.captain_order) && 'turn'
+        : // depois da escolha: quem ficou sem kit ou cor completa até a véspera; admin ajusta sempre
+          !isAdminRole(profile) && ((mine?.kit_id && mine?.color) ? 'done' : todayISO() >= pelada.date && 'late')
       setData({ teams, mine, kits: kits ?? [], creation: settings?.kit_creation_enabled, locked })
       setKitId(mine?.kit_id ?? null)
       setColor(mine?.color?.id ?? null)
@@ -57,8 +59,14 @@ export default function MeuTime() {
     return (
       <div className="flex flex-col items-center px-8 pt-12 text-center">
         <Lock size={30} className="mb-3 text-muted" />
-        <b className="text-lg">Ainda não é a sua vez</b>
-        <p className="mt-1 text-sm text-muted">Kit e cor só podem ser escolhidos na sua vez de escolher um jogador.</p>
+        <b className="text-lg">{{ turn: 'Ainda não é a sua vez', done: 'Kit e cor já escolhidos', late: 'Prazo encerrado' }[data.locked]}</b>
+        <p className="mt-1 text-sm text-muted">
+          {{
+            turn: 'Kit e cor só podem ser escolhidos na sua vez de escolher um jogador.',
+            done: 'Depois da escolha dos times, kit e cor não mudam mais. Se precisar, fale com um admin.',
+            late: 'Kit e cor podiam ser escolhidos até a véspera da pelada. O time fica no padrão.',
+          }[data.locked]}
+        </p>
         <button className="btn-outline mt-6" onClick={() => navigate('/times')}>
           Voltar para os times
         </button>

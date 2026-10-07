@@ -347,6 +347,14 @@ try {
   await expect('outro time não pega o mesmo kit na pelada', async () => q(`select choose_identity($1,$2,'azul')`, [await team(2), kit]), true)
   await expect('outro time não pega a mesma cor na pelada', async () => q(`select choose_identity($1,null,'verde')`, [await team(2)]), true)
   await expect('capitão não muda o time dos outros', async () => q(`select choose_identity($1,null,'roxo')`, [await team(1)]), true)
+  await expect('time que já tem kit e cor não muda depois da escolha', async () => { await as(id('j1')); return q(`select choose_identity($1,null,'cinza')`, [await team(1)]) }, true)
+  await expect('sem kit depois da véspera: fica o padrão', async () => {
+    await as(null)
+    await q(`update peladas set date = current_date where id=$1`, [pel2])
+    await as(id('j2'))
+    return q(`select choose_identity($1,null,'cinza')`, [await team(2)])
+  }, true)
+  await expect('admin ajusta kit e cor depois da escolha', async () => { await as(id('adm')); return q(`select choose_identity($1,null,'cinza')`, [await team(4)]) })
   await expect('jogador do time diz "não vou" no dia: sai e vira vaga de diarista', async () => {
     await as(id('j7'))
     await q(`update presence set answer='nao_vou' where pelada_id=$1 and profile_id=$2`, [pel2, id('j7')])

@@ -8,7 +8,7 @@ import TeamCard from '../components/TeamCard'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
 import { DRAFT_ORDER } from '../lib/constants'
-import { dayLabel, timeLabel } from '../lib/dates'
+import { dayLabel, timeLabel, todayISO } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
 import { fetchCurrentPelada } from '../lib/peladas'
 import { photoUrl } from '../lib/storage'
@@ -255,16 +255,20 @@ export default function Times() {
         </div>
       )}
 
-      {myTeam && (
+      {myTeam && (drafting || !myTeam.kit_id || !myTeam.color) && (
         <div className="px-4 pt-3">
-          {!drafting || myTurn ? (
-            <Link to="/times/meu" className="btn-outline flex items-center justify-center gap-2">
-              <Shirt size={18} /> Meu time: kit e cor
-            </Link>
-          ) : (
+          {drafting && !myTurn ? (
             <div className="btn-ghost flex items-center justify-center gap-2 text-muted">
               <Lock size={16} /> Kit e cor: libera na sua vez de escolher
             </div>
+          ) : !drafting && todayISO() >= pelada.date ? (
+            <div className="btn-ghost flex items-center justify-center gap-2 text-muted">
+              <Lock size={16} /> Prazo do kit acabou: o time fica no padrão
+            </div>
+          ) : (
+            <Link to="/times/meu" className="btn-outline flex items-center justify-center gap-2">
+              <Shirt size={18} /> {drafting ? 'Meu time: kit e cor' : 'Falta escolher kit e cor (até a véspera)'}
+            </Link>
           )}
         </div>
       )}
