@@ -1,6 +1,7 @@
 import { ChevronRight, Flag, Play, Plus, UserPlus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import AdminPresenceSheet from '../components/AdminPresenceSheet'
 import FillSlotSheet from '../components/FillSlotSheet'
 import Sheet from '../components/Sheet'
 import TeamCard from '../components/TeamCard'
@@ -78,6 +79,7 @@ export default function PeladaHoje() {
   const [isHelper, setIsHelper] = useState(false)
   const [sheet, setSheet] = useState(false)
   const [fill, setFill] = useState(null)
+  const [marking, setMarking] = useState(null)
 
   const load = useCallback(async () => {
     const p = await fetchCurrentPelada()
@@ -161,7 +163,16 @@ export default function PeladaHoje() {
       ) : (
         <div className="grid grid-cols-2 gap-2 px-4">
           {teams.map((t) => (
-            <TeamCard key={t.id} team={t} onSlotClick={canManage && pelada.status !== 'encerrada' ? (slot, team) => setFill({ slot, team }) : undefined} />
+            <TeamCard
+              key={t.id}
+              team={t}
+              onSlotClick={canManage && pelada.status !== 'encerrada' ? (slot, team) => setFill({ slot, team }) : undefined}
+              onMemberClick={
+                isAdmin && pelada.status !== 'encerrada'
+                  ? (m) => m.profile_id && setMarking({ person: { id: m.profile_id, name: m.name }, answer: m.answer })
+                  : undefined
+              }
+            />
           ))}
         </div>
       )}
@@ -211,6 +222,24 @@ export default function PeladaHoje() {
           </Link>
         )}
       </div>
+
+      {isAdmin && teams.length > 0 && pelada.status !== 'encerrada' && (
+        <p className="px-4 pt-2 text-xs text-muted">Admin: toque num jogador do time para marcar que ele não vai (vira vaga de diarista).</p>
+      )}
+
+      {marking && (
+        <AdminPresenceSheet
+          pelada={pelada}
+          person={marking.person}
+          answer={marking.answer}
+          inTeam
+          onClose={() => setMarking(null)}
+          onDone={() => {
+            setMarking(null)
+            load()
+          }}
+        />
+      )}
 
       {fill && (
         <FillSlotSheet

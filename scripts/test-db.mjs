@@ -366,6 +366,19 @@ try {
     return 'trocado'
   })
   await expect('novo capitão escolhe kit e cor', async () => { await as(id('j7')); return q(`select choose_identity($1,null,'laranja')`, [await team(3)]) })
+  await expect('admin marca que um jogador do time não vai (faltou sem avisar) e depois desfaz', async () => {
+    await as(id('adm'))
+    await q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'nao_vou') on conflict (pelada_id, profile_id) do update set answer='nao_vou'`, [pel2, id('j8')])
+    const out = await one(`select is_out from team_members where pelada_id=$1 and profile_id=$2`, [pel2, id('j8')])
+    await q(`update presence set answer='vou' where pelada_id=$1 and profile_id=$2`, [pel2, id('j8')])
+    const back = await one(`select is_out from team_members where pelada_id=$1 and profile_id=$2`, [pel2, id('j8')])
+    if (!out.is_out || back.is_out) throw new Error(JSON.stringify({ out, back }))
+    return 'vaga criada e desfeita'
+  })
+  await expect('jogador não marca presença por outro', async () => {
+    await as(id('j9'))
+    return q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'nao_vou') on conflict (pelada_id, profile_id) do update set answer='nao_vou'`, [pel2, id('j8')])
+  }, true)
   await expect('"vou" com a pelada em andamento é recusado', async () => {
     await as(id('j9'))
     return q(`update presence set answer='vou' where pelada_id=$1 and profile_id=$2 returning 1`, [pel2, id('j9')]).then((r) => {

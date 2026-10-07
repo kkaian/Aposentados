@@ -14,7 +14,7 @@ Site instalável (PWA) para a pelada: registra jogos, gols, assistências e cart
 - **Front:** React + Vite + Tailwind + `vite-plugin-pwa`. Ícones: `lucide-react`. Fonte Barlow.
 - **Back:** Supabase no plano gratuito (Postgres, Auth, Storage, RLS, Realtime e `pg_cron`). Sem servidor próprio: as regras ficam no banco (constraints, triggers e funções RPC).
 - **Hospedagem:** Vercel, que publica sozinha cada push na `main`. O endereço e a chave pública (`publishable`) do Supabase ficam em `src/lib/supabase.js`; a proteção dos dados é o RLS.
-- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (94 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
+- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (96 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
 - **Login:** só usuário + senha (sem Google). O Supabase usa um e-mail interno `usuario@aposentados.app`; a confirmação de e-mail fica desligada.
 - **Fotos e escudos:** reduzidos no celular antes de enviar (foto ~100 KB, escudo ~60 KB). Trocar a foto substitui a antiga. Limite de 200 KB por arquivo.
 - **Instalação:** item "Instalar app" no menu. No Android abre o aviso do Chrome (`beforeinstallprompt`); no iPhone mostra as instruções do Safari. O item some quando o app já está instalado. O app se atualiza sozinho (às vezes é preciso fechar e abrir).
@@ -75,6 +75,7 @@ Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#
 Vou/Não vou, atualizando ao vivo. Marcam presença os mensalistas e os diaristas chamados pelo admin. **A presença é só um status** (vai, dúvida para quem não respondeu, não vai): a escolha dos times não depende dela, e definir os capitães não marca presença por eles.
 - "Vou" vale enquanto a lista está aberta; "Não vou" (**Desfazer ida**, para emergências) vale até a pelada acabar.
 - Quem já está num time e responde "Não vou" sai do time e fica uma **vaga de diarista** no lugar; os admins são avisados e preenchem com avulso ou alguém com conta, ou deixam a vaga e, no jogo, alguém de outro time completa (Emprestar). Se a pessoa voltar para "Vou" antes de a vaga ser preenchida, volta para o time.
+- **Admin marca por outra pessoa** (faltou sem avisar): tocando no jogador na lista de Presença ou no card do time em Pelada de hoje, escolhe "Vai" ou "Não vai". Vale a mesma regra da vaga de diarista.
 
 ### Times da pelada
 

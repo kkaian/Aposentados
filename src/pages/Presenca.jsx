@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import AdminPresenceSheet from '../components/AdminPresenceSheet'
 import PresenceAnswer from '../components/PresenceAnswer'
 import { Segmented, Spinner } from '../components/ui'
-import { useAuth } from '../lib/auth'
+import { isAdminRole, useAuth } from '../lib/auth'
 import { dayLabel, timeLabel } from '../lib/dates'
 import { fetchCurrentPelada, fetchEligible } from '../lib/peladas'
 import { photoUrl } from '../lib/storage'
@@ -16,16 +17,21 @@ export default function Presenca() {
   const [eligible, setEligible] = useState([])
   const [list, setList] = useState([])
   const [tab, setTab] = useState('vao')
+  const [inTeam, setInTeam] = useState(new Set())
+  const [marking, setMarking] = useState(null)
+  const isAdmin = isAdminRole(profile)
 
   const load = useCallback(async () => {
     const p = id ? (await supabase.from('peladas').select('*').eq('id', id).maybeSingle()).data : await fetchCurrentPelada()
     setPelada(p ?? null)
     if (!p) return
-    const [el, { data }] = await Promise.all([
+    const [el, { data }, { data: members }] = await Promise.all([
       fetchEligible(p.id),
       supabase.from('presence_list').select('*').eq('pelada_id', p.id).order('answered_at'),
+      supabase.from('team_members').select('profile_id').eq('pelada_id', p.id).eq('is_out', false),
     ])
     setEligible(el)
+    setInTeam(new Set((members ?? []).map((m) => m.profile_id).filter(Boolean)))
     setList(data ?? [])
   }, [id])
 
@@ -92,7 +98,13 @@ export default function Presenca() {
       {rows.map((r, i) => {
         const p = byId[r.profile_id] ?? { name: 'Jogador', id: r.profile_id }
         return (
-          <div key={r.profile_id} className="flex min-h-14 items-center gap-3 border-b border-row px-4">
+          <button
+            key={r.profile_id}
+            type="button"
+            disabled={!isAdmin || pelada.status === 'encerrada'}
+            onClick={() => setMarking({ person: p, answer: r.answer ?? null })}
+            className="flex min-h-14 w-full items-center gap-3 border-b border-row px-4 text-left active:bg-surface-2"
+          >
             {tab === 'espera' && <b className="w-5 text-center text-muted">{i + 1}</b>}
             <Avatar name={p.name} src={photoUrl(p.photo_path)} />
             <div className="flex-1">
@@ -100,9 +112,25 @@ export default function Presenca() {
               {p.type === 'diarista' && <div className="text-xs text-muted">diarista</div>}
             </div>
             <span className="rounded-full border border-action px-2 py-0.5 text-xs text-action">{badge}</span>
-          </div>
+          </button>
         )
       })}
+      {isAdmin && pelada.status !== 'encerrada' && (
+        <p className="px-4 pt-3 text-xs text-muted">Admin: toque num jogador para marcar se ele vai ou não (ex.: faltou sem avisar).</p>
+      )}
+      {marking && (
+        <AdminPresenceSheet
+          pelada={pelada}
+          person={marking.person}
+          answer={marking.answer}
+          inTeam={inTeam.has(marking.person.id)}
+          onClose={() => setMarking(null)}
+          onDone={() => {
+            setMarking(null)
+            load()
+          }}
+        />
+      )}
       <p className="px-4 pt-3 text-xs text-muted">
         A presença é só um aviso: os capitães podem escolher qualquer mensalista, menos quem disse "Não vou". Quem já está num
         time e desiste deixa uma vaga de diarista para os admins preencherem.
