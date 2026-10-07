@@ -2,6 +2,7 @@ import { CalendarX2, ChevronLeft, ChevronRight, Star } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import { PushCard } from '../components/PushControls'
 import { Notice, Segmented, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { addMonths, dayLabel, monthName, monthStart, timeLabel, todayISO } from '../lib/dates'
@@ -174,6 +175,7 @@ export default function Inicio() {
   return (
     <div className="pb-4">
       <NextPelada />
+      <PushCard />
 
       <div className="flex items-center pt-4 pr-2 pl-4">
         <span className="flex-1 text-lg font-bold">

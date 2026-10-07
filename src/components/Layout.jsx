@@ -17,10 +17,11 @@ import {
   Users,
   Wallet,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { isAdminRole, useAuth } from '../lib/auth'
 import { useInstallPrompt } from '../lib/install'
+import { forgetPush, syncPush } from '../lib/push'
 import { photoUrl } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 import Avatar from './Avatar'
@@ -107,6 +108,11 @@ export default function Layout() {
   const [installOpen, setInstallOpen] = useState(false)
   const { installed } = useInstallPrompt()
   const { pathname } = useLocation()
+
+  // aparelho com notificações ativas recebe os avisos da conta logada
+  useEffect(() => {
+    syncPush()
+  }, [profile?.id])
   const close = () => setMenuOpen(false)
 
   return (
@@ -200,8 +206,9 @@ export default function Layout() {
             <div className="mt-auto border-t border-line p-2">
               <button
                 className={`${itemClass} text-muted`}
-                onClick={() => {
+                onClick={async () => {
                   close()
+                  await forgetPush().catch(() => {})
                   supabase?.auth.signOut()
                 }}
               >

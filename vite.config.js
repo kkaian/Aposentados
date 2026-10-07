@@ -10,6 +10,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'escudo.jpg'],
+      workbox: { importScripts: ['push-sw.js'], navigateFallbackDenylist: [/^\/api\//] },
       manifest: {
         name: 'Aposentados FC',
         short_name: 'Aposentados',

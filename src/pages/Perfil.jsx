@@ -2,6 +2,7 @@ import { Camera, ChevronLeft, ChevronRight, Trophy } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import { PushSetting } from '../components/PushControls'
 import { Notice, Segmented, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { addMonths, monthLabel, monthName, monthStart, todayISO } from '../lib/dates'
@@ -274,6 +275,7 @@ export default function Perfil() {
                 Avaliar colegas
               </Link>
             )}
+            <PushSetting />
             <Link to="/trocar-senha" className="mt-2 flex h-11 w-full items-center justify-center text-sm text-muted">
               Trocar senha
             </Link>
