@@ -133,6 +133,15 @@ Drible, chute, velocidade, defesa, passe e overall, de 1 a 5 estrelas. Só mensa
 - Lançamentos manuais: entrada avulsa, gasto (nome e valor: society, água, juiz) e repasse entre admins (não muda o total).
 - **Auditável:** nada é apagado. Lançamento errado é estornado com motivo, guardando quem lançou, quem estornou e quando. Exporta CSV do mês.
 
+### Notificações
+
+Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. iPhone: só com o app instalado na tela de início (iOS 16.4+).
+- **Todos os chamados:** pelada marcada, diarista chamado e lembrete na véspera, ao meio-dia, para quem não respondeu.
+- **Escolha:** você é capitão, sua vez de escolher (um aviso por vez, também quando começam os 10 min), você foi escolhido ou sorteado, times fechados.
+- **Pagamentos:** confirmado; vencendo em 3 dias e no dia (para quem não pagou).
+- **Admins:** cadastro novo, pedido de senha, "Já paguei".
+- Como funciona: o banco decide quem avisar e chama `/api/push` (Vercel) por `pg_net`; as chaves VAPID ficam em `private.push_config`, fora do git. Aparelho que deixou de existir sai da lista sozinho.
+
 ### Cadastro e acesso
 
 - **Cadastro:** código de convite (gerar um novo invalida o anterior) + aprovação do admin. Entra como diarista.
@@ -221,6 +230,7 @@ Ideias para depois:
 - Notas mudam 1 vez por pelada (antes era 1 vez por mês).
 - Mensalidade vale para os mensalistas do momento em que a cobrança é criada.
 - Empate pode ser decidido nos pênaltis e conta como vitória.
+- Notificações por Web Push, sem custo, com os avisos da seção 5.
 - A escolha dos times termina antes do horário da pelada (o que faltar é sorteado).
 - Pelada de 04/10/2026 (feita no papel) lançada direto no banco.
 
