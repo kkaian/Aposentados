@@ -80,7 +80,6 @@ export default function Presenca() {
             {pelada.status === 'encerrada' ? 'Esta pelada já foi encerrada.' : 'A presença é para mensalistas e diaristas chamados pelo admin.'}
           </div>
         )}
-        {mine?.waitlisted && <div className="mt-2 text-xs text-gold">Você está na lista de espera (posição {mine.position - pelada.max_slots}).</div>}
       </div>
 
       <Segmented

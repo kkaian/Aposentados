@@ -1,3 +1,4 @@
+import { CheckCircle2 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { friendlyError } from '../lib/errors'
@@ -41,43 +42,47 @@ export default function PresenceAnswer({ pelada, mine, onDone, className = '' })
     setUndo({ inTeam: (data ?? []).length > 0 })
   }
 
-  const status = mine?.waitlisted
-    ? 'Você está na lista de espera'
-    : mine?.answer === 'vou'
-      ? 'Você vai'
-      : mine?.answer === 'nao_vou'
-        ? 'Você não vai'
-        : 'Você ainda não respondeu (dúvida)'
+  const status = mine?.answer === 'nao_vou' ? 'Você não vai' : 'Você ainda não respondeu (dúvida)'
 
   return (
     <div className={className}>
-      <div className="flex gap-2">
-        <button
-          className={`h-11 flex-1 rounded-lg border-2 border-action font-semibold disabled:opacity-40 ${mine?.answer === 'vou' ? 'bg-action text-white' : 'text-action'}`}
-          disabled={busy || !canGo}
-          onClick={() => answer('vou')}
-        >
-          Vou
-        </button>
-        <button
-          className={`h-11 flex-1 rounded-lg border-2 border-line-2 font-semibold disabled:opacity-40 ${mine?.answer === 'nao_vou' ? 'bg-surface-2 text-ink' : 'text-muted'}`}
-          disabled={busy || !canSkip}
-          onClick={skip}
-        >
-          Não vou
-        </button>
-      </div>
-      <div className="mt-2 flex items-center gap-2 text-xs text-muted">
-        <span className="flex-1">
-          {status}
-          {!canGo && canSkip && ' · lista fechada'}
-        </span>
-        {mine?.answer === 'vou' && canSkip && (
-          <button className="font-semibold text-action" disabled={busy} onClick={skip}>
-            Desfazer ida
-          </button>
-        )}
-      </div>
+      {mine?.answer === 'vou' ? (
+        // já confirmou: um selo no lugar dos botões; "Desfazer ida" fica ao lado
+        <div className="flex items-center gap-2">
+          <div className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border-2 border-[#2E8B57] bg-[#2E8B57]/15 font-semibold text-[#7FD3A4]">
+            <CheckCircle2 size={18} /> Confirmado
+          </div>
+          {canSkip && (
+            <button className="h-11 rounded-lg border-2 border-line-2 px-3 text-sm font-semibold text-muted" disabled={busy} onClick={skip}>
+              Desfazer ida
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-2">
+            <button
+              className="h-11 flex-1 rounded-lg border-2 border-action font-semibold text-action disabled:opacity-40"
+              disabled={busy || !canGo}
+              onClick={() => answer('vou')}
+            >
+              Vou
+            </button>
+            <button
+              className={`h-11 flex-1 rounded-lg border-2 border-line-2 font-semibold disabled:opacity-40 ${mine?.answer === 'nao_vou' ? 'bg-surface-2 text-ink' : 'text-muted'}`}
+              disabled={busy || !canSkip}
+              onClick={skip}
+            >
+              Não vou
+            </button>
+          </div>
+          <div className="mt-2 text-xs text-muted">
+            {status}
+            {!canGo && canSkip && ' · lista fechada'}
+          </div>
+        </>
+      )}
+      {mine?.waitlisted && <div className="mt-2 text-xs text-gold">Você está na lista de espera.</div>}
       {error && (
         <div className="mt-2">
           <Notice>{error}</Notice>
