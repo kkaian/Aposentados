@@ -279,6 +279,8 @@ try {
   await as(id('j4')); await q(`select draft_pick($1,$2)`, [pel2, id('j8')])
   await expect('quem disse "não vou" não pode ser escolhido', async () => { await as(id('j4')); return q(`select draft_pick($1,$2)`, [pel2, id('dono')]) }, true)
   await expect('rodada 2 começa pelo capitão 4 (1234 · 4123) e escolhe quem não respondeu', async () => { await as(id('j4')); await q(`select draft_pick($1,$2)`, [pel2, id('j9')]); return 'ok' })
+  await expect('admin também respeita a vez (não escolhe jogador pelo capitão)', async () => { await as(id('adm')); return q(`select draft_pick($1,$2)`, [pel2, id('j10')]) }, true)
+  await expect('admin não mexe em kit e cor durante a escolha', async () => { await as(id('adm')); return q(`select choose_identity($1,null,'cinza')`, [await team(2)]) }, true)
   await expect('kit e cor fora da vez do capitão é recusado', async () => { await as(id('j2')); return q(`select choose_identity($1,null,'roxo')`, [await team(2)]) }, true)
   await expect('kit e cor na vez do capitão', async () => { await as(id('j1')); return q(`select choose_identity($1,null,'roxo')`, [await team(1)]) })
   await expect('vaga de diarista não pode enquanto há disponíveis', async () => { await as(id('j1')); return q(`select draft_pick_slot($1)`, [pel2]) }, true)

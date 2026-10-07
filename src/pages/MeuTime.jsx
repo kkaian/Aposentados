@@ -40,7 +40,9 @@ export default function MeuTime() {
       const mine = teamId ? teams.find((t) => t.id === teamId) : teams.find((t) => t.captain_id === profile.id)
       // durante a escolha, o capitão só mexe em kit e cor na vez dele
       const locked =
-        !isAdminRole(profile) && draft && draft.phase !== 'concluida' && DRAFT_ORDER.flat()[draft.next_pick - 1] !== mine?.captain_order
+        draft &&
+        draft.phase !== 'concluida' &&
+        (mine?.captain_id !== profile.id || DRAFT_ORDER.flat()[draft.next_pick - 1] !== mine?.captain_order)
       setData({ teams, mine, kits: kits ?? [], creation: settings?.kit_creation_enabled, locked })
       setKitId(mine?.kit_id ?? null)
       setColor(mine?.color?.id ?? null)

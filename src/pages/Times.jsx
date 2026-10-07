@@ -224,7 +224,9 @@ export default function Times() {
   const turnTeam = teams.find((t) => t.captain_order === turnOrder)
   const myTeam = teams.find((t) => t.captain_id === profile.id)
   const myTurn = drafting && turnTeam?.captain_id === profile.id
-  const canPick = drafting && (myTurn || isAdmin)
+  // durante a escolha, só o capitão da vez escolhe (admin também espera a vez)
+  const canPick = drafting && myTurn
+  const showLock = drafting && !myTurn && (myTeam || isAdmin)
   const slots = teams.length === 4 && draft?.next_pick ? 5 : 0
 
   return (
@@ -236,7 +238,7 @@ export default function Times() {
           <div className="text-xs font-semibold tracking-wide text-muted">
             4 CAPITÃES · ESCOLHA {Math.min(draft.next_pick, 16)} DE 16
           </div>
-          <div className="mt-0.5 text-lg font-bold">{myTurn ? 'Sua vez, capitão!' : `Vez de ${turnTeam?.label ?? '…'}`}</div>
+          <div className="mt-0.5 text-lg font-bold">{myTurn ? 'Sua vez, capitão!' : `Vez de ${turnTeam?.captain?.name ?? '…'}`}</div>
           {myTurn && <div className="text-xs text-muted">Kit e cor também só agora: escolha antes do jogador, porque depois a vez passa.</div>}
           <div className="mt-1 flex items-center gap-1.5 text-sm text-muted">
             <Clock size={15} />
@@ -273,7 +275,7 @@ export default function Times() {
             <TeamCard team={t} slots={slots} onSlotClick={isAdmin || isHelper ? (slot, team) => setFill({ slot, team }) : undefined} />
             {isAdmin && (
               <div className="flex justify-center gap-3 py-1.5 text-xs font-semibold text-action">
-                {t.captain_id !== profile.id && <Link to={`/times/meu?time=${t.id}`}>Kit e cor</Link>}
+                {!drafting && t.captain_id !== profile.id && <Link to={`/times/meu?time=${t.id}`}>Kit e cor</Link>}
                 {t.captain_id && pelada.status !== 'encerrada' && <button onClick={() => setChangeCaptain(t)}>Trocar capitão</button>}
               </div>
             )}
@@ -303,6 +305,11 @@ export default function Times() {
                   Escolher vaga de diarista
                 </button>
               )}
+              {showLock && (
+                <div className="btn-ghost mt-3 flex items-center justify-center gap-2 text-muted">
+                  <Lock size={16} /> Vaga de diarista: espere a sua vez
+                </div>
+              )}
               <p className="mt-2 text-xs text-muted">A vaga é preenchida no dia com quem aparecer: avulso, diarista com conta ou mensalista de última hora.</p>
             </div>
           )}
@@ -320,6 +327,11 @@ export default function Times() {
                 <button className="btn h-9 px-3 text-sm" disabled={busy !== null} onClick={() => pick(p)}>
                   Escolher
                 </button>
+              )}
+              {showLock && (
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-line-2 text-muted" aria-label="Não é a sua vez">
+                  <Lock size={16} />
+                </span>
               )}
             </div>
           ))}
