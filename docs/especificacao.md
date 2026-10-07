@@ -14,7 +14,7 @@ Site instalável (PWA) para a pelada: registra jogos, gols, assistências e cart
 - **Front:** React + Vite + Tailwind + `vite-plugin-pwa`. Ícones: `lucide-react`. Fonte Barlow.
 - **Back:** Supabase no plano gratuito (Postgres, Auth, Storage, RLS, Realtime e `pg_cron`). Sem servidor próprio: as regras ficam no banco (constraints, triggers e funções RPC).
 - **Hospedagem:** Vercel, que publica sozinha cada push na `main`. O endereço e a chave pública (`publishable`) do Supabase ficam em `src/lib/supabase.js`; a proteção dos dados é o RLS.
-- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (96 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
+- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (98 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
 - **Login:** só usuário + senha (sem Google). O Supabase usa um e-mail interno `usuario@aposentados.app`; a confirmação de e-mail fica desligada.
 - **Fotos e escudos:** reduzidos no celular antes de enviar (foto ~100 KB, escudo ~60 KB). Trocar a foto substitui a antiga. Limite de 200 KB por arquivo.
 - **Instalação:** item "Instalar app" no menu. No Android abre o aviso do Chrome (`beforeinstallprompt`); no iPhone mostra as instruções do Safari. O item some quando o app já está instalado. O app se atualiza sozinho (às vezes é preciso fechar e abrir).
@@ -50,7 +50,7 @@ Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#
 **Papéis fixos:** dono, admin e jogador. **Ajudante** não é papel fixo: é escolhido em cada pelada e vale só para ela.
 - **Dono:** os mesmos direitos do admin e, a mais, escolhe e remove admins. Pode passar a posse para outro admin e continua como admin. Só existe um dono.
 - **Admin:** edita e exclui qualquer dado, aprova cadastros, gerencia peladas, times, kits, mensalistas, pagamentos e o caixa.
-- **Ajudante:** registra os jogos daquela pelada (quando é o responsável), define o próximo jogo, preenche vagas e empresta jogadores.
+- **Ajudante:** registra os jogos daquela pelada (junto com os admins), define o próximo jogo, preenche vagas e empresta jogadores.
 - **Jogador:** vê tudo (menos o caixa); botões de registro aparecem trancados.
 
 **Tipos:**
@@ -99,7 +99,7 @@ Vou/Não vou, atualizando ao vivo. Marcam presença os mensalistas e os diarista
 
 - O jogo termina com **10 min ou 2 gols**: o app avisa e mostra o placar final com "Salvar resultado". Depois de salvo, só admin corrige.
 - **Empate:** ao salvar, escolhe-se "Empate" ou qual time **venceu nos pênaltis**. Vitória nos pênaltis conta como vitória (pódio, troféus, Seleção do mês); os gols dos pênaltis não entram no placar. Admin pode trocar depois.
-- **Responsável pelo registro:** quem inicia o jogo. Um por vez; pode passar para um ajudante ou admin, o admin assume ou libera. Os outros acompanham ao vivo com os botões trancados.
+- **Quem registra:** qualquer admin ou ajudante da pelada, vários ao mesmo tempo (combinem para não lançar o mesmo gol duas vezes; admin exclui o repetido). Os jogadores acompanham ao vivo com os botões trancados. Na escolha de ajudantes aparecem só jogadores, porque admins e dono já podem registrar.
 - **Eventos:** gol (com passo 2: assistência ou "sem assistência"), gol contra (conta para o adversário e não entra no ranking de gols), cartão amarelo e vermelho (só registro, sem suspensão) e substituição.
 - **Substituição parcial:** entra mensalista, diarista, avulso ou **alguém de outro time**. **Emprestar jogador:** coloca alguém em campo sem tirar ninguém (lesão, time com 4). Os dois valem só para aquele jogo; no próximo jogo do time dele, o jogador volta ao time original.
 - **Créditos:** gols, assistências e vitória contam para o time em que o jogador esteve em campo naquela partida.
@@ -168,7 +168,7 @@ Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. i
 | Pelada de hoje | `/pelada` | logados | times, jogos do dia, próximo jogo, preencher vaga, encerrar |
 | Times da pelada | `/times` | logados | escolha ao vivo, prazos, disponíveis, vaga de diarista |
 | Meu time | `/times/meu` | capitão/admin | kit e cor; criar ou sugerir kit |
-| Jogo | `/jogo/:id` | logados | placar, cronômetro, eventos, responsável, emprestar; detalhe depois de encerrado |
+| Jogo | `/jogo/:id` | logados | placar, cronômetro, eventos, emprestar; detalhe depois de encerrado |
 | Histórico | `/historico` | logados | peladas por mês, filtro de jogador |
 | Avaliar colegas / jogador | `/notas`, `/notas/:id` | mensalistas | lista com estrelas; votação por jogador |
 | Pagamentos | `/pagamentos` | logados | cobranças em aberto e pagas; parte do admin |
@@ -191,7 +191,7 @@ Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. i
 - **Kits:** `kits` (nome + escudo, ativo) · `kit_suggestions`.
 - **Peladas:** `peladas` · `pelada_helpers` · `pelada_diaristas` · `guests` (avulsos) · `presence`.
 - **Times:** `teams` (pelada, ordem do capitão, kit, cor; kit e cor únicos por pelada) · `team_members` (escolha, origem, vaga de diarista, troca integral) · `drafts` (fase, prazo, próxima escolha).
-- **Jogos:** `games` (times, status, responsável) · `game_lineup` (quem esteve em campo e quando) · `game_events`.
+- **Jogos:** `games` (times, status, quem iniciou) · `game_lineup` (quem esteve em campo e quando) · `game_events`.
 - **Notas:** `ratings` (uma por avaliador e avaliado).
 - **Dinheiro:** `charges` (mensalidades e cotinhas) · `payments` (uma por pessoa cobrada) · `cash_entries` (caixa).
 - **Consultas (views):** `game_scores`, `player_month_stats`, `podium`, `awards`, `pelada_team_results`, `rating_summary` (médias sem revelar quem votou), `presence_list`.
@@ -200,7 +200,7 @@ Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. i
 
 - Visitante sem login não lê nada. Conta pendente vê só o próprio perfil.
 - Jogador lê tudo, menos o caixa, as notas dos outros e o código de convite. Escreve só nome e foto do próprio perfil, a própria presença, as próprias notas e o "Já paguei".
-- O responsável registra eventos do jogo dele. Ajudante define o próximo jogo, preenche vagas e empresta jogadores na sua pelada.
+- Admin e ajudante da pelada registram eventos e encerram o jogo. Ajudante define o próximo jogo, preenche vagas e empresta jogadores na sua pelada.
 - Admin escreve em tudo; o caixa só por funções (sem apagar). Só o dono define admins e passa a posse.
 - Fotos: cada um mexe só na própria pasta. Escudos: só admin (sugestões na pasta do capitão).
 

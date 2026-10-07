@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Lock, Pencil, Play, Trash2, UserCog } from 'lucide-react'
+import { ArrowLeftRight, Lock, Pencil, Play, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
@@ -69,18 +69,20 @@ export default function Jogo() {
   const game = data?.game
   const score = data ? scoreOf(game, data.events) : [0, 0]
   const tied = score[0] === score[1]
-  const isRecorder = game?.recorder_id === profile.id
-  const canRecord = game && ((game.status === 'ao_vivo' && isRecorder) || (isAdmin && game.status !== 'agendado'))
+  // qualquer admin ou ajudante da pelada registra (quem iniciou também)
+  const isHelper = Boolean(data?.helperIds.includes(profile.id))
+  const canManage = isAdmin || isHelper || game?.recorder_id === profile.id
+  const canRecord = game && ((game.status === 'ao_vivo' && canManage) || (isAdmin && game.status !== 'agendado'))
 
   // fim do jogo: 10 min ou 2 gols -> tela de placar final para quem registra
   const reachedEnd = game?.status === 'ao_vivo' && (Math.max(...score) >= GAME_GOALS || minuteOf(game, now) >= GAME_MINUTES)
   const endKey = reachedEnd ? `${score.join('-')}-${minuteOf(game, now) >= GAME_MINUTES}` : null
   useEffect(() => {
-    if (endKey && (isRecorder || isAdmin) && endShownFor.current !== endKey && !sheet) {
+    if (endKey && canManage && endShownFor.current !== endKey && !sheet) {
       endShownFor.current = endKey
       setSheet({ kind: 'fim' })
     }
-  }, [endKey, isRecorder, isAdmin, sheet])
+  }, [endKey, canManage, sheet])
 
   if (data === undefined) return <Spinner />
   if (!data) return <div className="p-6 text-center text-muted">Jogo não encontrado.</div>
@@ -88,7 +90,6 @@ export default function Jogo() {
   const { pelada, team1, team2, lineup, events, guests, profiles, helperIds } = data
   const name = makeNamer(profiles, guests)
   const photoOf = Object.fromEntries(profiles.map((p) => [p.id, p.photo_path]))
-  const recorder = profiles.find((p) => p.id === game.recorder_id)
   const penaltyTeam = [team1, team2].find((t) => t && t.id === game.penalty_winner_id)
   const canStart = game.status === 'agendado' && (isAdmin || helperIds.includes(profile.id))
   // jogo encerrado: mostra todos que jogaram (sem repetir); ao vivo: só quem está em campo
@@ -155,7 +156,7 @@ export default function Jogo() {
           </button>
         ))}
         {inField(team?.id).length === 0 && game.status === 'agendado' && <div className="text-xs text-muted">Elenco entra ao iniciar o jogo.</div>}
-        {game.status === 'ao_vivo' && (isRecorder || isAdmin || helperIds.includes(profile.id)) && (
+        {game.status === 'ao_vivo' && canManage && (
           <button className="mt-1 h-9 w-full rounded-lg border border-dashed border-line-2 text-xs font-semibold text-action" onClick={() => setSheet({ kind: 'lend', team })}>
             + Emprestar jogador
           </button>
@@ -193,32 +194,19 @@ export default function Jogo() {
         )}
       </div>
 
-      {game.status === 'ao_vivo' &&
-        (isRecorder || isAdmin || helperIds.includes(profile.id) ? (
-          <div className="card mx-4 mt-3 flex items-center gap-3">
-            <div className="flex-1">
-              <div className="text-xs font-semibold tracking-wide text-muted">RESPONSÁVEL PELO REGISTRO</div>
-              <div className="font-semibold">{recorder ? (isRecorder ? `Você · ${recorder.name}` : recorder.name) : 'Ninguém registrando'}</div>
-            </div>
-            <button className="btn-ghost flex h-10 items-center gap-1.5 px-3 text-sm" onClick={() => setSheet({ kind: 'resp' })}>
-              <UserCog size={16} /> Trocar
-            </button>
-          </div>
-        ) : (
-          <div className="mx-4 mt-3 flex items-start gap-2 rounded-xl border border-line bg-surface p-3 text-sm text-muted">
-            <Lock size={16} className="mt-0.5 flex-none" />
-            <span>
-              Registrando agora: {recorder?.name ?? 'ninguém'}. Só ele ou um admin marcam os eventos. Você acompanha ao vivo.
-            </span>
-          </div>
-        ))}
+      {game.status === 'ao_vivo' && !canManage && (
+        <div className="mx-4 mt-3 flex items-start gap-2 rounded-xl border border-line bg-surface p-3 text-sm text-muted">
+          <Lock size={16} className="mt-0.5 flex-none" />
+          <span>Admins e ajudantes desta pelada registram os eventos. Você acompanha ao vivo.</span>
+        </div>
+      )}
 
       {canStart && (
         <div className="px-4 pt-3">
           <button className="btn flex w-full items-center justify-center gap-2" disabled={busy} onClick={() => rpc('start_game', { p_game: game.id })}>
             <Play size={18} /> Iniciar jogo e cronômetro
           </button>
-          <p className="mt-1 text-xs text-muted">Quem inicia vira o responsável pelo registro.</p>
+          <p className="mt-1 text-xs text-muted">Admins e ajudantes desta pelada registram os eventos juntos.</p>
         </div>
       )}
 
@@ -266,7 +254,7 @@ export default function Jogo() {
         )
       })}
 
-      {game.status === 'ao_vivo' && (isRecorder || isAdmin) && (
+      {game.status === 'ao_vivo' && canManage && (
         <div className="px-4 pt-4">
           <button className="btn-ghost w-full" onClick={() => setSheet({ kind: 'fim' })}>
             Encerrar jogo
@@ -366,37 +354,6 @@ export default function Jogo() {
         />
       )}
 
-      {sheet?.kind === 'resp' && (
-        <Sheet title={`Registro do jogo ${game.number}`} subtitle={recorder ? `${recorder.name} · registrando desde ${new Date(game.recorder_since).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Ninguém registrando agora.'} onClose={() => setSheet(null)}>
-          {(isRecorder || isAdmin) && (
-            <>
-              <div className="mb-1 text-sm font-semibold">Passar o registro para</div>
-              {profiles
-                .filter((p) => p.id !== game.recorder_id && (helperIds.includes(p.id) || p.role !== 'jogador'))
-                .map((p) => (
-                  <button key={p.id} className="flex min-h-12 w-full items-center gap-3 border-b border-row text-left" onClick={() => rpc('pass_recorder', { p_game: game.id, p_to: p.id }, () => setSheet(null))}>
-                    <Avatar name={p.name} src={photoUrl(p.photo_path)} size={28} />
-                    <span className="flex-1">{p.name}</span>
-                    <span className="text-xs text-muted">{helperIds.includes(p.id) ? 'ajudante' : 'admin'}</span>
-                  </button>
-                ))}
-            </>
-          )}
-          <div className="mt-3 space-y-2">
-            {!isRecorder && (isAdmin || !game.recorder_id) && (
-              <button className="btn w-full" onClick={() => rpc('take_recorder', { p_game: game.id }, () => setSheet(null))}>
-                Assumir{isAdmin ? ' (admin)' : ''}
-              </button>
-            )}
-            {(isRecorder || isAdmin) && game.recorder_id && (
-              <button className="btn-ghost w-full" onClick={() => rpc('release_recorder', { p_game: game.id }, () => setSheet(null))}>
-                Liberar registro
-              </button>
-            )}
-          </div>
-          <p className="mt-2 text-xs text-muted">Enquanto houver um responsável, os outros ajudantes veem os botões trancados.</p>
-        </Sheet>
-      )}
 
       {sheet?.kind === 'fim' && (
         <Sheet onClose={() => setSheet(null)}>

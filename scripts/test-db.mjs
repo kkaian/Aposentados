@@ -72,6 +72,7 @@ try {
   await as(id('adm'))
   const pel = (await one(`insert into peladas (date, start_time, location, max_slots) values ('2026-10-11','08:00','Campo',20) returning id`)).id
   await q(`insert into pelada_helpers values ($1,$2)`, [pel, id('j9')])
+  await q(`insert into pelada_helpers values ($1,$2)`, [pel, id('j10')])
   const t1 = (await one(`insert into teams (pelada_id, captain_order, captain_id, color) values ($1,1,$2,'azul') returning id`, [pel, id('j1')])).id
   const t2 = (await one(`insert into teams (pelada_id, captain_order, captain_id, color) values ($1,2,$2,'vermelho') returning id`, [pel, id('j2')])).id
   await expect('dois times não usam a mesma cor na mesma pelada', () => q(`insert into teams (pelada_id, captain_order, captain_id, color) values ($1,3,$2,'azul')`, [pel, id('j3')]), true)
@@ -90,6 +91,10 @@ try {
   await as(id('j5'))
   await expect('jogador comum não registra evento', () => q(`insert into game_events (game_id, type, team_id, player_id) values ($1,'gol',$2,$3)`, [game, t1, id('j5')]), true)
   await expect('jogador comum não assume o registro', () => q(`select take_recorder($1)`, [game]), true)
+  await expect('jogador comum não encerra o jogo', () => q(`select finish_game($1)`, [game]), true)
+  await as(id('j10'))
+  await expect('outro ajudante registra junto (sem ser o responsável)', () => q(`insert into game_events (game_id, type, team_id, player_id, minute) values ($1,'amarelo',$2,$3,8)`, [game, t1, id('j1')]))
+  await as(id('j5'))
   await expect('jogador vê o placar ao vivo', async () => JSON.stringify(await one(`select team1_goals, team2_goals from game_scores where game_id=$1`, [game])))
 
   await as(id('j9'))

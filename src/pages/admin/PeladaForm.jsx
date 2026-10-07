@@ -178,7 +178,7 @@ export default function PeladaForm() {
         onRemove={(p) => toggle('pelada_helpers', helperIds, setHelperIds, p)}
         onAdd={() => setPicker('helpers')}
       />
-      <p className="px-4 pt-2 text-xs text-muted">Ajudantes registram os jogos só nesta pelada.</p>
+      <p className="px-4 pt-2 text-xs text-muted">Ajudantes registram os jogos só nesta pelada, junto com os admins (vários ao mesmo tempo).</p>
 
       {!isNew && (
         <>
@@ -234,8 +234,8 @@ export default function PeladaForm() {
       {picker === 'helpers' && (
         <PlayerPicker
           title="Ajudantes"
-          subtitle="Quem pode registrar os jogos desta pelada."
-          players={players}
+          subtitle="Jogadores que vão registrar os jogos desta pelada. Admins e dono já podem, não precisam estar aqui."
+          players={players.filter((p) => p.role === 'jogador' || helperIds.includes(p.id))}
           selectedIds={helperIds}
           renderSub={(p) => p.type}
           onPick={(p) => toggle('pelada_helpers', helperIds, setHelperIds, p)}
