@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from '../components/Avatar'
 import FillSlotSheet from '../components/FillSlotSheet'
+import Sheet from '../components/Sheet'
 import TeamCard from '../components/TeamCard'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
@@ -46,6 +47,49 @@ function OverallStars({ value }) {
   )
 }
 
+// Admin troca o capitão por outro mensalista do mesmo time, sem refazer a escolha
+function ChangeCaptainSheet({ team, onClose, onDone }) {
+  const [pick, setPick] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const options = team.active.filter((m) => m.profile_id && m.type === 'mensalista' && m.profile_id !== team.captain_id)
+
+  async function confirm() {
+    setBusy(true)
+    setError('')
+    const { error } = await supabase.rpc('change_captain', { p_team: team.id, p_profile: pick })
+    setBusy(false)
+    if (error) setError(friendlyError(error))
+    else onDone()
+  }
+
+  return (
+    <Sheet
+      title="Trocar capitão"
+      subtitle={`${team.label}. O time, as escolhas e o kit continuam; a vez do time passa a ser do novo capitão.`}
+      onClose={onClose}
+    >
+      {options.length === 0 && <div className="py-3 text-sm text-muted">Nenhum mensalista neste time além do capitão.</div>}
+      {options.map((m) => (
+        <label key={m.id} className="flex min-h-12 items-center gap-3 border-b border-row">
+          <input type="radio" name="new-captain" className="h-5 w-5 accent-action" checked={pick === m.profile_id} onChange={() => setPick(m.profile_id)} />
+          <Avatar name={m.name} src={photoUrl(m.photo_path)} size={28} />
+          <span className="flex-1">{m.name}</span>
+        </label>
+      ))}
+      <div className="mt-3">
+        <Notice>{error}</Notice>
+      </div>
+      <button className="btn mt-3 w-full" disabled={!pick || busy} onClick={confirm}>
+        Tornar capitão
+      </button>
+      <button className="mt-2 h-11 w-full text-sm text-muted" onClick={onClose}>
+        Cancelar
+      </button>
+    </Sheet>
+  )
+}
+
 export default function Times() {
   const { profile } = useAuth()
   const isAdmin = isAdminRole(profile)
@@ -57,6 +101,7 @@ export default function Times() {
   const [busy, setBusy] = useState(null)
   const [isHelper, setIsHelper] = useState(false)
   const [fill, setFill] = useState(null)
+  const [changeCaptain, setChangeCaptain] = useState(null)
   const ticking = useRef(false)
   const now = useNow()
 
@@ -226,10 +271,11 @@ export default function Times() {
         {teams.map((t) => (
           <div key={t.id}>
             <TeamCard team={t} slots={slots} onSlotClick={isAdmin || isHelper ? (slot, team) => setFill({ slot, team }) : undefined} />
-            {isAdmin && t.captain_id !== profile.id && (
-              <Link to={`/times/meu?time=${t.id}`} className="block py-1.5 text-center text-xs font-semibold text-action">
-                Editar kit e cor
-              </Link>
+            {isAdmin && (
+              <div className="flex justify-center gap-3 py-1.5 text-xs font-semibold text-action">
+                {t.captain_id !== profile.id && <Link to={`/times/meu?time=${t.id}`}>Kit e cor</Link>}
+                {t.captain_id && pelada.status !== 'encerrada' && <button onClick={() => setChangeCaptain(t)}>Trocar capitão</button>}
+              </div>
             )}
           </div>
         ))}
@@ -283,6 +329,16 @@ export default function Times() {
             pelada.
           </p>
         </>
+      )}
+      {changeCaptain && (
+        <ChangeCaptainSheet
+          team={changeCaptain}
+          onClose={() => setChangeCaptain(null)}
+          onDone={() => {
+            setChangeCaptain(null)
+            load()
+          }}
+        />
       )}
       {fill && (
         <FillSlotSheet

@@ -355,6 +355,17 @@ try {
     if (r.is_out || r.vagas || !r.pick_number) throw new Error(JSON.stringify(r))
     return 'de volta'
   })
+  await expect('jogador não troca capitão', async () => { await as(id('j7')); return q(`select change_captain($1,$2)`, [await team(3), id('j7')]) }, true)
+  await expect('capitão de outro time não vira capitão deste', async () => { await as(id('adm')); return q(`select change_captain($1,$2)`, [await team(3), id('j5')]) }, true)
+  await expect('admin troca o capitão por outro do mesmo time, sem refazer a escolha', async () => {
+    await as(id('adm'))
+    const before = (await one(`select count(*)::int n from team_members where team_id=$1`, [await team(3)])).n
+    await q(`select change_captain($1,$2)`, [await team(3), id('j7')])
+    const r = await one(`select t.captain_id = $2 novo, (select is_captain from team_members where team_id=t.id and profile_id=$3) antigo, (select count(*)::int from team_members where team_id=t.id) membros from teams t where t.id=$1`, [await team(3), id('j7'), id('j3')])
+    if (!r.novo || r.antigo || r.membros !== before) throw new Error(JSON.stringify(r))
+    return 'trocado'
+  })
+  await expect('novo capitão escolhe kit e cor', async () => { await as(id('j7')); return q(`select choose_identity($1,null,'laranja')`, [await team(3)]) })
   await expect('"vou" com a pelada em andamento é recusado', async () => {
     await as(id('j9'))
     return q(`update presence set answer='vou' where pelada_id=$1 and profile_id=$2 returning 1`, [pel2, id('j9')]).then((r) => {
