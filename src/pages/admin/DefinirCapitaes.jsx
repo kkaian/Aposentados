@@ -17,6 +17,7 @@ export default function DefinirCapitaes() {
   const [pelada, setPelada] = useState()
   const [mensalistas, setMensalistas] = useState([])
   const [going, setGoing] = useState(new Set())
+  const [notGoing, setNotGoing] = useState(new Set())
   const [captains, setCaptains] = useState([null, null, null, null])
   const [hasTeams, setHasTeams] = useState(false)
   const [slot, setSlot] = useState(null)
@@ -33,7 +34,8 @@ export default function DefinirCapitaes() {
     ]).then(([p, players, pres, teams]) => {
       setPelada(p.data)
       setMensalistas(players.filter((x) => x.type === 'mensalista'))
-      setGoing(new Set((pres.data ?? []).filter((r) => r.answer === 'vou' && !r.waitlisted).map((r) => r.profile_id)))
+      setGoing(new Set((pres.data ?? []).filter((r) => r.answer === 'vou').map((r) => r.profile_id)))
+      setNotGoing(new Set((pres.data ?? []).filter((r) => r.answer === 'nao_vou').map((r) => r.profile_id)))
       if (teams.data?.length === 4 && teams.data.every((t) => t.captain_id)) {
         setCaptains(teams.data.map((t) => t.captain_id))
         setHasTeams(true)
@@ -88,8 +90,8 @@ export default function DefinirCapitaes() {
         <b>Como funciona a escolha</b>
         <p className="mt-1 text-muted">
           Depois de confirmar, os capitães têm 24 h livres para escolher, na ordem 1-2-3-4 · 4-1-2-3 · 1-2-3-4 · 1-2-3-4. Depois,
-          cada escolha tem 10 min; sem escolha, o app sorteia. Só podem ser escolhidos jogadores que confirmaram presença. A escolha
-          termina sozinha no horário da pelada.
+          cada escolha tem 10 min; sem escolha, o app sorteia. Pode ser escolhido qualquer mensalista (e diarista chamado), menos quem
+          disse que não vai; a presença aparece só como aviso. A escolha termina sozinha no horário da pelada.
         </p>
       </div>
 
@@ -105,7 +107,7 @@ export default function DefinirCapitaes() {
           title={`Capitão ${slot + 1}`}
           players={mensalistas.filter((m) => !captains.includes(m.id) || captains[slot] === m.id)}
           selectedIds={[captains[slot]]}
-          renderSub={(p) => (going.has(p.id) ? 'confirmou presença' : 'sem presença confirmada')}
+          renderSub={(p) => (going.has(p.id) ? 'vai' : notGoing.has(p.id) ? 'disse que não vai' : 'dúvida (não respondeu)')}
           onPick={(p) => {
             setCaptains((cs) => cs.map((c, i) => (i === slot ? p.id : c)))
             setSlot(null)

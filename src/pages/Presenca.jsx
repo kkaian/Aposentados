@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
-import { Notice, Segmented, Spinner } from '../components/ui'
+import PresenceAnswer from '../components/PresenceAnswer'
+import { Segmented, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { dayLabel, timeLabel } from '../lib/dates'
-import { friendlyError } from '../lib/errors'
 import { fetchCurrentPelada, fetchEligible } from '../lib/peladas'
 import { photoUrl } from '../lib/storage'
 import { supabase } from '../lib/supabase'
@@ -16,8 +16,6 @@ export default function Presenca() {
   const [eligible, setEligible] = useState([])
   const [list, setList] = useState([])
   const [tab, setTab] = useState('vao')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     const p = id ? (await supabase.from('peladas').select('*').eq('id', id).maybeSingle()).data : await fetchCurrentPelada()
@@ -45,19 +43,6 @@ export default function Presenca() {
     return () => supabase.removeChannel(channel)
   }, [pelada, load])
 
-  async function answer(value) {
-    const mine = list.find((r) => r.profile_id === profile.id)
-    if (mine?.answer === value) return
-    setBusy(true)
-    setError('')
-    const { error } = await supabase
-      .from('presence')
-      .upsert({ pelada_id: pelada.id, profile_id: profile.id, answer: value, answered_at: new Date().toISOString() })
-    setBusy(false)
-    if (error) setError(/row-level/.test(error.message) ? 'A presença é para mensalistas e diaristas chamados pelo admin.' : friendlyError(error))
-    else load()
-  }
-
   if (pelada === undefined) return <Spinner />
   if (!pelada) return <div className="p-6 text-center text-muted">Nenhuma pelada marcada.</div>
 
@@ -68,10 +53,10 @@ export default function Presenca() {
   const answered = new Set(list.map((r) => r.profile_id))
   const noAnswer = eligible.filter((p) => !answered.has(p.id))
   const mine = list.find((r) => r.profile_id === profile.id)
-  const canAnswer = pelada.presence_open && pelada.status === 'agendada' && byId[profile.id]
+  const canAnswer = byId[profile.id] && (pelada.status === 'agendada' || pelada.status === 'em_andamento')
 
   const rows = { vao: going, nao: notGoing, sem: noAnswer.map((p) => ({ profile_id: p.id })), espera: waiting }[tab]
-  const badge = { vao: 'Vai', nao: 'Não vai', sem: 'Sem resposta', espera: 'Espera' }[tab]
+  const badge = { vao: 'Vai', nao: 'Não vai', sem: 'Dúvida', espera: 'Espera' }[tab]
 
   return (
     <div className="pb-6">
@@ -83,25 +68,13 @@ export default function Presenca() {
           {going.length} de {pelada.max_slots} vagas{waiting.length > 0 && ` · ${waiting.length} na espera`}
         </div>
         {canAnswer ? (
-          <div className="mt-3 flex gap-2">
-            <button className={`h-11 flex-1 rounded-lg border-2 border-action font-semibold ${mine?.answer === 'vou' ? 'bg-action text-white' : 'text-action'}`} disabled={busy} onClick={() => answer('vou')}>
-              Vou
-            </button>
-            <button className={`h-11 flex-1 rounded-lg border-2 border-line-2 font-semibold ${mine?.answer === 'nao_vou' ? 'bg-surface-2' : 'text-muted'}`} disabled={busy} onClick={() => answer('nao_vou')}>
-              Não vou
-            </button>
-          </div>
+          <PresenceAnswer pelada={pelada} mine={mine} onDone={load} className="mt-3" />
         ) : (
           <div className="mt-2 text-xs text-muted">
-            {!pelada.presence_open ? 'A lista de presença está fechada.' : 'A presença é para mensalistas e diaristas chamados pelo admin.'}
+            {pelada.status === 'encerrada' ? 'Esta pelada já foi encerrada.' : 'A presença é para mensalistas e diaristas chamados pelo admin.'}
           </div>
         )}
         {mine?.waitlisted && <div className="mt-2 text-xs text-gold">Você está na lista de espera (posição {mine.position - pelada.max_slots}).</div>}
-        {error && (
-          <div className="mt-2">
-            <Notice>{error}</Notice>
-          </div>
-        )}
       </div>
 
       <Segmented
@@ -111,7 +84,7 @@ export default function Presenca() {
         options={[
           ['vao', `Vão ${going.length}`],
           ['nao', `Não vão ${notGoing.length}`],
-          ['sem', `Sem resp. ${noAnswer.length}`],
+          ['sem', `Dúvida ${noAnswer.length}`],
           ['espera', `Espera ${waiting.length}`],
         ]}
       />
@@ -131,7 +104,8 @@ export default function Presenca() {
         )
       })}
       <p className="px-4 pt-3 text-xs text-muted">
-        Entram mensalistas e diaristas chamados pelo admin. Passou do limite de vagas, vai para a espera.
+        A presença é só um aviso: os capitães podem escolher qualquer mensalista, menos quem disse "Não vou". Quem já está num
+        time e desiste deixa uma vaga de diarista para os admins preencherem.
       </p>
     </div>
   )

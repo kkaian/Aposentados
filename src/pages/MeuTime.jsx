@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import TeamShield from '../components/TeamShield'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
-import { TEAM_COLORS } from '../lib/constants'
+import { DRAFT_ORDER, TEAM_COLORS } from '../lib/constants'
 import { friendlyError } from '../lib/errors'
 import { fetchCurrentPelada } from '../lib/peladas'
 import { shieldUrl } from '../lib/storage'
@@ -31,21 +31,37 @@ export default function MeuTime() {
     ;(async () => {
       const pelada = await fetchCurrentPelada()
       if (!pelada) return setData(null)
-      const [teams, { data: kits }, { data: settings }] = await Promise.all([
+      const [teams, { data: kits }, { data: settings }, { data: draft }] = await Promise.all([
         fetchTeams(pelada.id),
         supabase.from('kits').select('*').eq('active', true).order('name'),
         supabase.from('app_settings').select('kit_creation_enabled').single(),
+        supabase.from('drafts').select('phase, next_pick').eq('pelada_id', pelada.id).maybeSingle(),
       ])
       const mine = teamId ? teams.find((t) => t.id === teamId) : teams.find((t) => t.captain_id === profile.id)
-      setData({ teams, mine, kits: kits ?? [], creation: settings?.kit_creation_enabled })
+      // durante a escolha, o capitão só mexe em kit e cor na vez dele
+      const locked =
+        !isAdminRole(profile) && draft && draft.phase !== 'concluida' && DRAFT_ORDER.flat()[draft.next_pick - 1] !== mine?.captain_order
+      setData({ teams, mine, kits: kits ?? [], creation: settings?.kit_creation_enabled, locked })
       setKitId(mine?.kit_id ?? null)
       setColor(mine?.color?.id ?? null)
     })()
-  }, [profile.id, teamId, reload])
+  }, [profile, teamId, reload])
 
   if (data === undefined) return <Spinner />
   if (!data?.mine) {
     return <div className="p-6 text-center text-muted">{isAdminRole(profile) ? 'Time não encontrado.' : 'Você não é capitão nesta pelada.'}</div>
+  }
+  if (data.locked) {
+    return (
+      <div className="flex flex-col items-center px-8 pt-12 text-center">
+        <Lock size={30} className="mb-3 text-muted" />
+        <b className="text-lg">Ainda não é a sua vez</b>
+        <p className="mt-1 text-sm text-muted">Kit e cor só podem ser escolhidos na sua vez de escolher um jogador.</p>
+        <button className="btn-outline mt-6" onClick={() => navigate('/times')}>
+          Voltar para os times
+        </button>
+      </div>
+    )
   }
 
   const others = data.teams.filter((t) => t.id !== data.mine.id)

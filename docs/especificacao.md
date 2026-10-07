@@ -14,7 +14,7 @@ Site instalável (PWA) para a pelada: registra jogos, gols, assistências e cart
 - **Front:** React + Vite + Tailwind + `vite-plugin-pwa`. Ícones: `lucide-react`. Fonte Barlow.
 - **Back:** Supabase no plano gratuito (Postgres, Auth, Storage, RLS, Realtime e `pg_cron`). Sem servidor próprio: as regras ficam no banco (constraints, triggers e funções RPC).
 - **Hospedagem:** Vercel, que publica sozinha cada push na `main`. O endereço e a chave pública (`publishable`) do Supabase ficam em `src/lib/supabase.js`; a proteção dos dados é o RLS.
-- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (77 casos, numa transação desfeita no final). A senha do banco fica só no `.env.local`, fora do git.
+- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (87 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
 - **Login:** só usuário + senha (sem Google). O Supabase usa um e-mail interno `usuario@aposentados.app`; a confirmação de e-mail fica desligada.
 - **Fotos e escudos:** reduzidos no celular antes de enviar (foto ~100 KB, escudo ~60 KB). Trocar a foto substitui a antiga. Limite de 200 KB por arquivo.
 - **Instalação:** item "Instalar app" no menu. No Android abre o aviso do Chrome (`beforeinstallprompt`); no iPhone mostra as instruções do Safari. O item some quando o app já está instalado. O app se atualiza sozinho (às vezes é preciso fechar e abrir).
@@ -72,16 +72,18 @@ Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#
 
 ### Presença
 
-Vou/Não vou, limite de vagas e lista de espera pela ordem de resposta, atualizando ao vivo. Marcam presença os mensalistas e os diaristas chamados pelo admin.
+Vou/Não vou, atualizando ao vivo. Marcam presença os mensalistas e os diaristas chamados pelo admin. **A presença é só um status** (vai, dúvida para quem não respondeu, não vai): a escolha dos times não depende dela, e definir os capitães não marca presença por eles.
+- "Vou" vale enquanto a lista está aberta; "Não vou" (**Desfazer ida**, para emergências) vale até a pelada acabar.
+- Quem já está num time e responde "Não vou" sai do time e fica uma **vaga de diarista** no lugar; os admins são avisados e preenchem com avulso ou alguém com conta, ou deixam a vaga e, no jogo, alguém de outro time completa (Emprestar). Se a pessoa voltar para "Vou" antes de a vaga ser preenchida, volta para o time.
 
 ### Times da pelada
 
 1. O admin escolhe 4 capitães entre os mensalistas. A ordem em que os define é a ordem das escolhas.
 2. São 16 escolhas em 4 rodadas: **1-2-3-4 · 4-1-2-3 · 1-2-3-4 · 1-2-3-4** (intencional: a ordem dá vantagem, e o capitão 4 é compensado só na 2ª rodada).
 3. **24 h livres** depois de definir os capitães (respeitando a ordem). Depois, **10 min por escolha**; sem escolha, o app sorteia. Tudo roda no servidor, mesmo com o app fechado.
-4. **Disponíveis:** só quem confirmou presença ("Vou", fora da espera) e ainda não está em um time.
+4. **Disponíveis:** mensalistas e diaristas chamados que ainda não estão em um time, menos quem disse "Não vou". A lista mostra quem vai e quem está em dúvida; o sorteio automático prefere quem confirmou.
 5. **Vaga de diarista:** quando não sobra ninguém disponível, o capitão da vez escolhe "Vaga de diarista" (não pode antes disso). Prazo vencido sem disponíveis vira vaga sozinho. No horário da pelada, o que faltar vira vaga e cada time fecha com 5.
-6. **Kit e cor:** cada capitão escolhe um kit (nome + escudo, cadastrados juntos) e uma cor. Na mesma pelada, quem escolhe primeiro bloqueia o kit e a cor; na pelada seguinte tudo fica livre. Até escolher, o time aparece como "Time de Fulano".
+6. **Kit e cor:** cada capitão escolhe um kit (nome + escudo, cadastrados juntos) e uma cor, **só na vez dele de escolher um jogador** (depois que a escolha termina, fica livre; o admin pode sempre). Na mesma pelada, quem escolhe primeiro bloqueia o kit e a cor; na pelada seguinte tudo fica livre. Até escolher, o time aparece como "Time de Fulano".
 7. **Kits novos:** só se o admin liberar a criação (economia de armazenamento). Com a criação desligada, o capitão pode sugerir um kit e o admin aprova.
 8. **Sorteio (dia atípico, só admin):** marca quem joga, 2 a 4 times, opção de equilibrar pelo overall (sem overall conta como 3), troca manual tocando em dois jogadores. Substitui os times da pelada, desde que nenhum jogo tenha começado.
 
@@ -225,7 +227,9 @@ Ideias para depois:
 - Pelada todo domingo; times, kits e cores refeitos a cada pelada; o mês guarda só as estatísticas individuais.
 - Escolha: 24 h livres e depois 10 min por escolha, sem a regra das 18h; ordem 1234 · 4123 · 1234 · 1234.
 - Kit é o par nome + escudo; cor da lista fixa; ambos bloqueados por pelada.
-- Disponíveis na escolha: só quem confirmou presença; vaga de diarista só quando não sobra ninguém.
+- Disponíveis na escolha: todos os mensalistas (e diaristas chamados), menos quem disse "Não vou"; vaga de diarista só quando não sobra ninguém. Presença é só status (07/10/2026).
+- "Não vou" de quem está num time vira vaga de diarista; "Desfazer ida" até a pelada acabar.
+- Kit e cor só na vez do capitão durante a escolha.
 - Sem login com Google; recuperação de acesso pelo admin.
 - Notas mudam 1 vez por pelada (antes era 1 vez por mês).
 - Mensalidade vale para os mensalistas do momento em que a cobrança é criada.

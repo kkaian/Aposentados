@@ -1,4 +1,4 @@
-import { Clock, Shirt, Users } from 'lucide-react'
+import { Clock, Lock, Shirt, Users } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from '../components/Avatar'
@@ -76,12 +76,18 @@ export default function Times() {
       const { data: ids } = await supabase.rpc('draft_available', { p_pelada: p.id })
       const list = (ids ?? []).map((r) => r.profile_id)
       if (list.length) {
-        const [{ data: people }, { data: ratings }] = await Promise.all([
+        const [{ data: people }, { data: ratings }, { data: pres }] = await Promise.all([
           supabase.from('profiles').select('id, name, photo_path, type').in('id', list),
           supabase.from('rating_summary').select('profile_id, overall').in('profile_id', list),
+          supabase.from('presence').select('profile_id, answer').eq('pelada_id', p.id),
         ])
         const overall = Object.fromEntries((ratings ?? []).map((r) => [r.profile_id, r.overall]))
-        setAvailable((people ?? []).map((p) => ({ ...p, overall: overall[p.id] })).sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0) || a.name.localeCompare(b.name)))
+        const answer = Object.fromEntries((pres ?? []).map((r) => [r.profile_id, r.answer]))
+        setAvailable(
+          (people ?? [])
+            .map((p) => ({ ...p, overall: overall[p.id], going: answer[p.id] === 'vou' }))
+            .sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0) || a.name.localeCompare(b.name)),
+        )
       } else setAvailable([])
     } else setAvailable([])
   }, [profile.id])
@@ -186,6 +192,7 @@ export default function Times() {
             4 CAPITÃES · ESCOLHA {Math.min(draft.next_pick, 16)} DE 16
           </div>
           <div className="mt-0.5 text-lg font-bold">{myTurn ? 'Sua vez, capitão!' : `Vez de ${turnTeam?.label ?? '…'}`}</div>
+          {myTurn && <div className="text-xs text-muted">Kit e cor também só agora: escolha antes do jogador, porque depois a vez passa.</div>}
           <div className="mt-1 flex items-center gap-1.5 text-sm text-muted">
             <Clock size={15} />
             {draft.phase === 'livre'
@@ -203,9 +210,15 @@ export default function Times() {
 
       {myTeam && (
         <div className="px-4 pt-3">
-          <Link to="/times/meu" className="btn-outline flex items-center justify-center gap-2">
-            <Shirt size={18} /> Meu time: kit e cor
-          </Link>
+          {!drafting || myTurn ? (
+            <Link to="/times/meu" className="btn-outline flex items-center justify-center gap-2">
+              <Shirt size={18} /> Meu time: kit e cor
+            </Link>
+          ) : (
+            <div className="btn-ghost flex items-center justify-center gap-2 text-muted">
+              <Lock size={16} /> Kit e cor: libera na sua vez de escolher
+            </div>
+          )}
         </div>
       )}
 
@@ -238,7 +251,7 @@ export default function Times() {
           <SectionLabel>Disponíveis · {available.length}</SectionLabel>
           {available.length === 0 && (
             <div className="px-4">
-              <div className="text-sm text-muted">Ninguém disponível. Só entra quem confirmou presença.</div>
+              <div className="text-sm text-muted">Ninguém disponível: todos os mensalistas já estão em um time ou disseram que não vão.</div>
               {canPick && (
                 <button className="btn-outline mt-3 w-full" disabled={busy !== null} onClick={pickSlot}>
                   Escolher vaga de diarista
@@ -252,7 +265,10 @@ export default function Times() {
               <Avatar name={p.name} src={photoUrl(p.photo_path)} />
               <div className="min-w-0 flex-1">
                 <div className="truncate">{p.name}</div>
-                <OverallStars value={p.overall} />
+                <div className="flex items-center gap-2">
+                  <OverallStars value={p.overall} />
+                  <span className={`text-[11px] ${p.going ? 'text-[#7FD3A4]' : 'text-gold'}`}>{p.going ? 'vai' : 'dúvida'}</span>
+                </div>
               </div>
               {canPick && (
                 <button className="btn h-9 px-3 text-sm" disabled={busy !== null} onClick={() => pick(p)}>
@@ -263,7 +279,8 @@ export default function Times() {
           ))}
           <p className="px-4 pt-3 text-xs text-muted">
             Ordem por rodada: 1-2-3-4 · 4-1-2-3 · 1-2-3-4 · 1-2-3-4. Primeiras 24 h livres; depois, 10 min por escolha. Sem
-            escolha, o app sorteia. Os times valem só para esta pelada.
+            escolha, o app sorteia (primeiro entre quem confirmou). Kit e cor: só na sua vez de escolher. Os times valem só para esta
+            pelada.
           </p>
         </>
       )}

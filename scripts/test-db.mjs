@@ -30,10 +30,14 @@ const mkUser = (n, meta) => q(`insert into auth.users (id, instance_id, aud, rol
 const one = async (s, p) => (await q(s, p)).rows[0]
 
 await q('begin')
+// --with=arquivo.sql: aplica uma migração nova dentro da transação (testa antes de aplicar de verdade)
+const extra = process.argv.find((a) => a.startsWith('--with='))?.slice(7)
+if (extra) await q((await import('node:fs')).readFileSync(extra, 'utf8'))
 try {
   // tira os dados reais do caminho (tudo é desfeito no rollback)
   await q(`update invites set active = false`)
   await q(`update profiles set status = 'inativo', role = 'jogador'`)
+  await q(`update peladas set date = date - 36500`)
   await q(`insert into invites (code) values ('TESTE123')`)
   await expect('cadastro com convite inválido é recusado', () => mkUser('x', { username: 'xx1', name: 'X', invite_code: 'ERRADO1' }), true)
   for (const n of ['dono', 'adm', 'j1', 'j2', 'j3', 'j4', 'j5', 'j6', 'j7', 'j8', 'j9', 'j10', 'dia'])
@@ -249,10 +253,17 @@ try {
   // escolha dos times
   await as(id('adm'))
   const pel2 = (await one(`insert into peladas (date, start_time, location, max_slots) values ('2026-10-18','08:00','Campo',20) returning id`)).id
-  for (const n of ['j1', 'j2', 'j3', 'j4', 'j5', 'j6', 'j7', 'j8', 'j9', 'j10']) await q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'vou')`, [pel2, id(n)])
+  // presença é só status: j4 (capitão) e j9 não responderam; dono e adm não vão
+  for (const n of ['j1', 'j2', 'j3', 'j5', 'j6', 'j7', 'j8', 'j10']) await q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'vou')`, [pel2, id(n)])
+  for (const n of ['dono', 'adm']) await q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'nao_vou')`, [pel2, id(n)])
   await expect('capitães precisam ser mensalistas', () => q(`select define_captains($1, $2)`, [pel2, [id('j1'), id('j2'), id('j3'), id('dia')]]), true)
   await expect('admin define 4 capitães', () => q(`select define_captains($1, $2)`, [pel2, [id('j1'), id('j2'), id('j3'), id('j4')]]))
   const team = async (order) => (await one(`select id from teams where pelada_id=$1 and captain_order=$2`, [pel2, order])).id
+  await expect('definir capitães não marca presença por eles', async () => {
+    const r = await one(`select count(*)::int n from presence where pelada_id=$1 and profile_id=$2`, [pel2, id('j4')])
+    if (r.n) throw new Error('marcou presença do capitão')
+    return 'capitão responde sozinho'
+  })
   await as(id('j2'))
   await expect('capitão 2 não escolhe na vez do 1', () => q(`select draft_pick($1,$2)`, [pel2, id('j5')]), true)
   await as(id('j1'))
@@ -261,7 +272,10 @@ try {
   await as(id('j2')); await q(`select draft_pick($1,$2)`, [pel2, id('j6')])
   await as(id('j3')); await q(`select draft_pick($1,$2)`, [pel2, id('j7')])
   await as(id('j4')); await q(`select draft_pick($1,$2)`, [pel2, id('j8')])
-  await expect('rodada 2 começa pelo capitão 4 (1234 · 4123)', async () => { await as(id('j4')); await q(`select draft_pick($1,$2)`, [pel2, id('j9')]); return 'ok' })
+  await expect('quem disse "não vou" não pode ser escolhido', async () => { await as(id('j4')); return q(`select draft_pick($1,$2)`, [pel2, id('dono')]) }, true)
+  await expect('rodada 2 começa pelo capitão 4 (1234 · 4123) e escolhe quem não respondeu', async () => { await as(id('j4')); await q(`select draft_pick($1,$2)`, [pel2, id('j9')]); return 'ok' })
+  await expect('kit e cor fora da vez do capitão é recusado', async () => { await as(id('j2')); return q(`select choose_identity($1,null,'roxo')`, [await team(2)]) }, true)
+  await expect('kit e cor na vez do capitão', async () => { await as(id('j1')); return q(`select choose_identity($1,null,'roxo')`, [await team(1)]) })
   await expect('vaga de diarista não pode enquanto há disponíveis', async () => { await as(id('j1')); return q(`select draft_pick_slot($1)`, [pel2]) }, true)
   await expect('fim das 24 h: turnos de 10 min e sorteio automático', async () => {
     await as(null)
@@ -326,6 +340,27 @@ try {
   await expect('outro time não pega o mesmo kit na pelada', async () => q(`select choose_identity($1,$2,'azul')`, [await team(2), kit]), true)
   await expect('outro time não pega a mesma cor na pelada', async () => q(`select choose_identity($1,null,'verde')`, [await team(2)]), true)
   await expect('capitão não muda o time dos outros', async () => q(`select choose_identity($1,null,'roxo')`, [await team(1)]), true)
+  await expect('jogador do time diz "não vou" no dia: sai e vira vaga de diarista', async () => {
+    await as(id('j7'))
+    await q(`update presence set answer='nao_vou' where pelada_id=$1 and profile_id=$2`, [pel2, id('j7')])
+    await as(null)
+    const r = await one(`select m.is_out, s.is_slot from team_members m join team_members s on s.replaces_member_id = m.id where m.pelada_id=$1 and m.profile_id=$2`, [pel2, id('j7')])
+    if (!r?.is_out || !r.is_slot) throw new Error(JSON.stringify(r))
+    return 'vaga criada'
+  })
+  await expect('voltou a ir antes de preencherem a vaga: volta para o time', async () => {
+    await as(id('adm'))
+    await q(`update presence set answer='vou' where pelada_id=$1 and profile_id=$2`, [pel2, id('j7')])
+    const r = await one(`select m.is_out, m.pick_number, (select count(*)::int from team_members s where s.replaces_member_id = m.id) vagas from team_members m where m.pelada_id=$1 and m.profile_id=$2`, [pel2, id('j7')])
+    if (r.is_out || r.vagas || !r.pick_number) throw new Error(JSON.stringify(r))
+    return 'de volta'
+  })
+  await expect('"vou" com a pelada em andamento é recusado', async () => {
+    await as(id('j9'))
+    return q(`update presence set answer='vou' where pelada_id=$1 and profile_id=$2 returning 1`, [pel2, id('j9')]).then((r) => {
+      if (!r.rowCount) throw new Error('sem linha')
+    }).catch(async () => q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'vou')`, [pel2, id('j9')]))
+  }, true)
   await as(id('adm'))
   await expect('substituição integral por avulso', async () => {
     const m = await one(`select id from team_members where pelada_id=$1 and profile_id=$2`, [pel2, id('j5')])

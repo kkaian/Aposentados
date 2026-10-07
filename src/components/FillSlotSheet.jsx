@@ -50,7 +50,11 @@ export default function FillSlotSheet({ slot, team, teams, onClose, onDone }) {
   }
 
   return (
-    <Sheet title="Preencher vaga de diarista" subtitle={`${team.label} · quem chegou para jogar`} onClose={onClose}>
+    <Sheet
+      title="Preencher vaga de diarista"
+      subtitle={`${team.label}${slot.replacing ? ` · no lugar de ${slot.replacing}` : ''}. Sem ninguém? Deixe a vaga: no jogo, alguém de outro time completa (Emprestar).`}
+      onClose={onClose}
+    >
       <Segmented className="mb-2" value={mode} onChange={setMode} options={[['conta', 'Com conta'], ['avulso', 'Avulso, sem conta']]} />
       {mode === 'conta' ? (
         <div className="max-h-[32dvh] overflow-y-auto">

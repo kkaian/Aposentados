@@ -2,6 +2,7 @@ import { CalendarX2, ChevronLeft, ChevronRight, Star } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import PresenceAnswer from '../components/PresenceAnswer'
 import { PushCard } from '../components/PushControls'
 import { Notice, Segmented, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
@@ -24,8 +25,6 @@ function NextPelada() {
   const [pelada, setPelada] = useState()
   const [going, setGoing] = useState(0)
   const [mine, setMine] = useState(null)
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -47,18 +46,6 @@ function NextPelada() {
     load()
   }, [load])
 
-  async function answer(value) {
-    if (mine?.answer === value) return
-    setBusy(true)
-    setError('')
-    const { error } = await supabase
-      .from('presence')
-      .upsert({ pelada_id: pelada.id, profile_id: profile.id, answer: value, answered_at: new Date().toISOString() })
-    setBusy(false)
-    if (error) setError(/row-level/.test(error.message) ? 'A presença é para mensalistas e diaristas chamados pelo admin.' : friendlyError(error))
-    else load()
-  }
-
   if (pelada === undefined) return null
   if (!pelada) {
     return (
@@ -69,41 +56,18 @@ function NextPelada() {
     )
   }
 
-  const status = mine?.waitlisted ? 'Você está na lista de espera' : mine?.answer === 'vou' ? 'Você vai' : mine ? 'Você não vai' : null
-
   return (
     <div className="card mx-4 mt-3">
-      <div className="flex items-center gap-2">
-        <Link to="/presenca" className="flex-1">
-          <div className="text-xs font-semibold tracking-wide text-muted">PRÓXIMA PELADA</div>
-          <div className="font-bold">
-            {dayLabel(pelada.date)} · {timeLabel(pelada.start_time)}
-          </div>
-          <div className="text-xs text-muted">
-            {going} de {pelada.max_slots} vagas · {pelada.location}
-          </div>
-        </Link>
-        <button
-          className={`h-11 w-[72px] rounded-lg border-2 border-action font-semibold ${mine?.answer === 'vou' ? 'bg-action text-white' : 'text-action'}`}
-          disabled={busy || !pelada.presence_open}
-          onClick={() => answer('vou')}
-        >
-          Vou
-        </button>
-        <button
-          className={`h-11 w-[88px] rounded-lg border-2 font-semibold ${mine?.answer === 'nao_vou' ? 'border-line-2 bg-surface-2 text-ink' : 'border-line-2 text-muted'}`}
-          disabled={busy || !pelada.presence_open}
-          onClick={() => answer('nao_vou')}
-        >
-          Não vou
-        </button>
-      </div>
-      {status && <div className="mt-2 text-xs text-muted">{status}</div>}
-      {error && (
-        <div className="mt-2">
-          <Notice>{error}</Notice>
+      <Link to="/presenca" className="mb-3 block">
+        <div className="text-xs font-semibold tracking-wide text-muted">PRÓXIMA PELADA</div>
+        <div className="font-bold">
+          {dayLabel(pelada.date)} · {timeLabel(pelada.start_time)}
         </div>
-      )}
+        <div className="text-xs text-muted">
+          {going} confirmados · {pelada.location}
+        </div>
+      </Link>
+      <PresenceAnswer pelada={pelada} mine={mine} onDone={load} />
     </div>
   )
 }

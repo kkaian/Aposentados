@@ -1,6 +1,13 @@
+import { Check, CircleHelp } from 'lucide-react'
 import { photoUrl } from '../lib/storage'
 import Avatar from './Avatar'
 import TeamShield from './TeamShield'
+
+// Presença é só status: ✓ vai, ? ainda não respondeu (quem diz "não vou" sai do time e vira vaga)
+function PresenceMark({ answer }) {
+  if (answer === 'vou') return <Check size={13} strokeWidth={3} className="flex-none text-[#7FD3A4]" aria-label="vai" />
+  return <CircleHelp size={13} className="flex-none text-gold" aria-label="dúvida" />
+}
 
 export default function TeamCard({ team, slots = 0, onMemberClick, onSlotClick, selectedId }) {
   const empty = Math.max(0, slots - team.active.length)
@@ -22,7 +29,7 @@ export default function TeamCard({ team, slots = 0, onMemberClick, onSlotClick, 
             onClick={() => onSlotClick?.(m, team)}
             className="mb-0.5 flex h-7 w-full items-center gap-1.5 rounded border border-dashed border-line-2 px-1.5 text-left text-[12px] text-muted"
           >
-            <span className="flex-1 truncate">Vaga de diarista</span>
+            <span className="flex-1 truncate">{m.replacing ? `Vaga · ${m.replacing} não vai` : 'Vaga de diarista'}</span>
             {onSlotClick && <span className="font-semibold text-action">Preencher</span>}
           </button>
         ) : (
@@ -35,6 +42,7 @@ export default function TeamCard({ team, slots = 0, onMemberClick, onSlotClick, 
         >
           <Avatar name={m.name} src={photoUrl(m.photo_path)} size={18} />
           <span className="truncate">{m.name}</span>
+          {m.profile_id && <PresenceMark answer={m.answer} />}
           {m.is_captain && <span className="rounded border border-muted px-1 text-[10px] text-muted">C</span>}
           {m.type === 'avulso' && <span className="rounded border border-action px-1 text-[10px] text-action">avulso</span>}
           {m.type === 'diarista' && <span className="rounded border border-line-2 px-1 text-[10px] text-muted">diarista</span>}
