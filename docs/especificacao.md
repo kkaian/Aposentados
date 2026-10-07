@@ -14,7 +14,7 @@ Site instalável (PWA) para a pelada: registra jogos, gols, assistências e cart
 - **Front:** React + Vite + Tailwind + `vite-plugin-pwa`. Ícones: `lucide-react`. Fonte Barlow.
 - **Back:** Supabase no plano gratuito (Postgres, Auth, Storage, RLS, Realtime e `pg_cron`). Sem servidor próprio: as regras ficam no banco (constraints, triggers e funções RPC).
 - **Hospedagem:** Vercel, que publica sozinha cada push na `main`. O endereço e a chave pública (`publishable`) do Supabase ficam em `src/lib/supabase.js`; a proteção dos dados é o RLS.
-- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (91 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
+- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (94 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
 - **Login:** só usuário + senha (sem Google). O Supabase usa um e-mail interno `usuario@aposentados.app`; a confirmação de e-mail fica desligada.
 - **Fotos e escudos:** reduzidos no celular antes de enviar (foto ~100 KB, escudo ~60 KB). Trocar a foto substitui a antiga. Limite de 200 KB por arquivo.
 - **Instalação:** item "Instalar app" no menu. No Android abre o aviso do Chrome (`beforeinstallprompt`); no iPhone mostra as instruções do Safari. O item some quando o app já está instalado. O app se atualiza sozinho (às vezes é preciso fechar e abrir).
@@ -55,7 +55,7 @@ Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#
 
 **Tipos:**
 - **Mensalista:** paga mensalidade, marca presença sozinho, pode ser capitão, entra no pódio, nos troféus e nas notas.
-- **Diarista:** todo mundo começa assim. Tem perfil e histórico, mas fica fora do pódio, dos troféus e das notas. Só marca presença numa pelada se o admin o chamar.
+- **Diarista:** todo mundo começa assim. Tem perfil e histórico, mas fica fora do pódio, dos troféus e das notas. Só marca presença numa pelada se o admin o chamar, e o admin **só pode chamar quando falta mensalista** para os 20 lugares (4 times de 5): há menos de 20 mensalistas ou algum disse "Não vou". Se o mensalista voltar a ir, o diarista sai da lista de disponíveis da escolha.
 - **Avulso:** sem conta, só o nome, criado na hora. Gols e assistências ficam só no histórico do dia.
 
 **Admin e tipo são independentes:** o pódio olha só o tipo. Quem vira admin começa como mensalista (se houver vaga na cota), mas pode ser retirado da mensalidade e continuar admin; nesse caso conta como diarista.
@@ -231,6 +231,7 @@ Ideias para depois:
 - Disponíveis na escolha: todos os mensalistas (e diaristas chamados), menos quem disse "Não vou"; vaga de diarista só quando não sobra ninguém. Presença é só status (07/10/2026).
 - "Não vou" de quem está num time vira vaga de diarista; "Desfazer ida" até a pelada acabar.
 - Kit e cor só na vez do capitão durante a escolha.
+- Diarista só é chamado/escolhido quando falta mensalista para os 20 lugares. Admin pode trocar o capitão sem refazer a escolha.
 - Sem login com Google; recuperação de acesso pelo admin.
 - Notas mudam 1 vez por pelada (antes era 1 vez por mês).
 - Mensalidade vale para os mensalistas do momento em que a cobrança é criada.

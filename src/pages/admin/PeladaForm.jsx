@@ -46,6 +46,8 @@ export default function PeladaForm() {
   const [players, setPlayers] = useState([])
   const [helperIds, setHelperIds] = useState([])
   const [diaristaIds, setDiaristaIds] = useState([])
+  // diarista só quando falta mensalista (alguém disse "não vou" ou há menos de 20 mensalistas)
+  const [diaristasOk, setDiaristasOk] = useState(true)
   const [picker, setPicker] = useState(null)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [msg, setMsg] = useState({})
@@ -69,7 +71,9 @@ export default function PeladaForm() {
       supabase.from('peladas').select('*').eq('id', id).single(),
       supabase.from('pelada_helpers').select('profile_id').eq('pelada_id', id),
       supabase.from('pelada_diaristas').select('profile_id').eq('pelada_id', id),
-    ]).then(([p, h, d]) => {
+      supabase.rpc('diaristas_liberados', { p_pelada: Number(id) }),
+    ]).then(([p, h, d, ok]) => {
+      setDiaristasOk(ok.data !== false)
       setPelada(p.data)
       setForm({ ...p.data, start_time: p.data.start_time.slice(0, 5) })
       setHelperIds((h.data ?? []).map((x) => x.profile_id))
@@ -183,11 +187,17 @@ export default function PeladaForm() {
             people={diaristas}
             disabled={locked}
             onRemove={(p) => toggle('pelada_diaristas', diaristaIds, setDiaristaIds, p)}
-            onAdd={() => setPicker('diaristas')}
+            onAdd={() =>
+              diaristasOk
+                ? setPicker('diaristas')
+                : setMsg({ error: 'Diarista só pode ser chamado quando algum mensalista disser que não vai (ou houver menos de 20 mensalistas).' })
+            }
           />
           <p className="px-4 pt-2 text-xs text-muted">
-            Mensalistas já entram na lista. Diaristas chamados também podem marcar presença. Avulsos (sem perfil) entram na hora
-            de montar os times.
+            {diaristasOk
+              ? 'Falta mensalista para fechar os 20 lugares: dá para chamar diaristas. Eles marcam presença e entram na escolha dos times.'
+              : 'Os 20 mensalistas estão disponíveis: diarista só pode ser chamado quando algum disser que não vai.'}{' '}
+            Avulsos (sem perfil) entram nas vagas de diarista no dia.
           </p>
         </>
       )}

@@ -392,6 +392,36 @@ try {
     return JSON.stringify(await one(`select count(*)::int times, (select count(*)::int from team_members where pelada_id=$1) jogadores from teams where pelada_id=$1`, [pel2]))
   })
 
+  // diarista só quando falta mensalista (20 lugares)
+  await as(null)
+  const invite = (await one(`select code from invites where active`)).code
+  for (let i = 1; i <= 8; i++) await mkUser('m' + i, { username: 'u_m' + i, name: 'Mensal ' + i, invite_code: invite })
+  await q(`update app_settings set mensalista_quota = 20`)
+  const pel3 = (await one(`insert into peladas (date, start_time, location, max_slots) values ('2026-10-25','08:00','Campo',20) returning id`)).id
+  await q(`update profiles set status='ativo', type='mensalista' where username like 'u_m%' or username in ('u_dono','u_adm','u_j1','u_j2','u_j3','u_j4','u_j5','u_j6','u_j7','u_j8','u_j9','u_j10')`)
+  await expect('com 20 mensalistas, diarista não é chamado antes de alguém dizer "não vou"', async () => {
+    const n = (await one(`select count(*)::int n from profiles where status='ativo' and type='mensalista'`)).n
+    if (n !== 20) throw new Error('mensalistas: ' + n)
+    await as(id('adm'))
+    return q(`insert into pelada_diaristas values ($1,$2)`, [pel3, id('dia')])
+  }, true)
+  await expect('mensalista disse "não vou": diarista pode ser chamado e escolhido', async () => {
+    await as(id('j1'))
+    await q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'nao_vou')`, [pel3, id('j1')])
+    await as(id('adm'))
+    await q(`insert into pelada_diaristas values ($1,$2)`, [pel3, id('dia')])
+    const r = await one(`select count(*)::int n from draft_available($1) where profile_id=$2`, [pel3, id('dia')])
+    if (r.n !== 1) throw new Error('diarista não disponível')
+    return 'liberado'
+  })
+  await expect('mensalista voltou a ir: diarista sai da lista de disponíveis', async () => {
+    await as(id('adm'))
+    await q(`update presence set answer='vou' where pelada_id=$1 and profile_id=$2`, [pel3, id('j1')])
+    const r = await one(`select count(*)::int n from draft_available($1) where profile_id=$2`, [pel3, id('dia')])
+    if (r.n) throw new Error('diarista ainda disponível')
+    return 'fora'
+  })
+
   // posse
   await as(id('dono'))
   await expect('dono passa a posse para adm', async () => { await q(`select transfer_ownership($1)`, [id('adm')]); const r = await q(`select username, role from profiles where role in ('dono','admin') order by 1`); return r.rows.map((x) => x.username + '=' + x.role).join(', ') })
