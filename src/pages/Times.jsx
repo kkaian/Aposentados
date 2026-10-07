@@ -329,9 +329,13 @@ export default function Times() {
                 </button>
               )}
               {showLock && (
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-line-2 text-muted" aria-label="Não é a sua vez">
-                  <Lock size={16} />
-                </span>
+                <button
+                  disabled
+                  className="flex h-9 items-center gap-1.5 rounded-lg border-2 border-line-2 bg-surface-2 px-3 text-sm font-semibold text-muted"
+                  aria-label="Escolher (não é a sua vez)"
+                >
+                  <Lock size={14} /> Escolher
+                </button>
               )}
             </div>
           ))}
