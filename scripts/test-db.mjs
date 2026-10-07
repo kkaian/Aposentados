@@ -91,7 +91,27 @@ try {
   await as(id('j9'))
   await expect('responsável salva o resultado', () => q(`select finish_game($1)`, [game]))
   await as(id('adm'))
+  await expect('pênaltis só em jogo empatado', async () => {
+    const g = (await one(`insert into games (pelada_id, number, team1_id, team2_id) values ($1,3,$2,$3) returning id`, [pel, t1, t2])).id
+    await q(`select start_game($1)`, [g])
+    await q(`insert into game_events (game_id, type, team_id, player_id) values ($1,'gol',$2,$3)`, [g, t1, id('j1')])
+    await expect_fail(() => q(`select finish_game($1, $2)`, [g, t2]))
+    await q(`delete from games where id = $1`, [g])
+  })
+  await expect('empate com vitória do time 2 nos pênaltis', async () => {
+    const g = (await one(`insert into games (pelada_id, number, team1_id, team2_id) values ($1,2,$2,$3) returning id`, [pel, t1, t2])).id
+    await q(`select start_game($1)`, [g])
+    await q(`select finish_game($1, $2)`, [g, t2])
+    const s = await one(`select team1_goals, team2_goals, winner_id = $2 as time2_venceu, penalties from game_scores where game_id = $1`, [g, t2])
+    if (!s.time2_venceu || !s.penalties) throw new Error(JSON.stringify(s))
+    return JSON.stringify(s)
+  })
   await expect('admin encerra a pelada', () => q(`select close_pelada($1)`, [pel]))
+  await expect('vitória nos pênaltis conta no pódio (j2: 1 vitória em 2 jogos)', async () => {
+    const r = await one(`select games, wins from player_month_stats where profile_id = $1`, [id('j2')])
+    if (r.games !== 2 || r.wins !== 1) throw new Error(JSON.stringify(r))
+    return JSON.stringify(r)
+  })
   await expect('pódio de outubro', async () => {
     const r = await q(`select name, goals, assists, wins, total, rank_total from podium where month='2026-10-01' order by rank_total, name`)
     return '\n' + r.rows.map((x) => `   ${x.rank_total}o ${x.name}: ${x.goals}G ${x.assists}A ${x.wins}V = ${x.total}`).join('\n')

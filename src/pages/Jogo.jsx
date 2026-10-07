@@ -68,6 +68,7 @@ export default function Jogo() {
 
   const game = data?.game
   const score = data ? scoreOf(game, data.events) : [0, 0]
+  const tied = score[0] === score[1]
   const isRecorder = game?.recorder_id === profile.id
   const canRecord = game && ((game.status === 'ao_vivo' && isRecorder) || (isAdmin && game.status !== 'agendado'))
 
@@ -88,6 +89,7 @@ export default function Jogo() {
   const name = makeNamer(profiles, guests)
   const photoOf = Object.fromEntries(profiles.map((p) => [p.id, p.photo_path]))
   const recorder = profiles.find((p) => p.id === game.recorder_id)
+  const penaltyTeam = [team1, team2].find((t) => t && t.id === game.penalty_winner_id)
   const canStart = game.status === 'agendado' && (isAdmin || helperIds.includes(profile.id))
   // jogo encerrado: mostra todos que jogaram (sem repetir); ao vivo: só quem está em campo
   const inField = (teamId) => {
@@ -179,6 +181,16 @@ export default function Jogo() {
           </div>
         </div>
         <div className={`mt-1 text-sm tabular-nums ${reachedEnd ? 'text-gold' : 'text-muted'}`}>{clock(game, now)}</div>
+        {tied && game.status === 'finalizado' && (
+          <div className="mt-1 text-sm text-muted">
+            {penaltyTeam ? `${penaltyTeam.label} venceu nos pênaltis` : 'Empate'}
+            {isAdmin && (
+              <button className="ml-2 text-xs font-semibold text-action" onClick={() => setSheet({ kind: 'penaltis' })}>
+                Alterar
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {game.status === 'ao_vivo' &&
@@ -399,13 +411,54 @@ export default function Jogo() {
               {team1?.label} x {team2?.label} · {minuteOf(game, now)} min
             </div>
           </div>
-          <button className="btn mt-5 w-full" disabled={busy} onClick={() => rpc('finish_game', { p_game: game.id }, () => setSheet(null))}>
-            Salvar resultado
-          </button>
+          {tied ? (
+            <>
+              <div className="mt-5 mb-2 text-center text-sm text-muted">Empatou. Teve pênaltis?</div>
+              <button className="btn w-full" disabled={busy} onClick={() => rpc('finish_game', { p_game: game.id }, () => setSheet(null))}>
+                Empate (sem vencedor)
+              </button>
+              {[team1, team2].map((t) => (
+                <button
+                  key={t?.id}
+                  className="btn-outline mt-2 flex w-full items-center justify-center gap-2"
+                  disabled={busy}
+                  onClick={() => rpc('finish_game', { p_game: game.id, p_penalty_winner: t.id }, () => setSheet(null))}
+                >
+                  <TeamShield team={t} size={18} /> {t?.label} venceu nos pênaltis
+                </button>
+              ))}
+            </>
+          ) : (
+            <button className="btn mt-5 w-full" disabled={busy} onClick={() => rpc('finish_game', { p_game: game.id }, () => setSheet(null))}>
+              Salvar resultado
+            </button>
+          )}
           <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setSheet(null)}>
             Voltar ao jogo
           </button>
           <p className="text-center text-xs text-muted">Para corrigir o placar, edite os eventos. Depois de salvar, só admin edita.</p>
+        </Sheet>
+      )}
+
+      {sheet?.kind === 'penaltis' && (
+        <Sheet title="Resultado do empate" subtitle={`Jogo ${game.number} · ${score[0]} x ${score[1]}`} onClose={() => setSheet(null)}>
+          {[null, team1?.id, team2?.id].map((teamId) => (
+            <button
+              key={teamId ?? 'empate'}
+              className={`${game.penalty_winner_id === teamId ? 'btn' : 'btn-outline'} mt-2 w-full`}
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                const { error } = await supabase.from('games').update({ penalty_winner_id: teamId }).eq('id', game.id)
+                setBusy(false)
+                if (error) setMsg(friendlyError(error))
+                setSheet(null)
+                load()
+              }}
+            >
+              {teamId ? `${[team1, team2].find((t) => t?.id === teamId)?.label} venceu nos pênaltis` : 'Empate (sem vencedor)'}
+            </button>
+          ))}
         </Sheet>
       )}
 

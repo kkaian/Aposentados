@@ -30,7 +30,13 @@ export function scoreOf(game, events) {
 
 export function winnerOf(game, events) {
   const [a, b] = scoreOf(game, events)
-  return a > b ? game.team1_id : b > a ? game.team2_id : null
+  return a > b ? game.team1_id : b > a ? game.team2_id : (game.penalty_winner_id ?? null)
+}
+
+// Empate decidido nos pênaltis
+export function wonOnPenalties(game, events) {
+  const [a, b] = scoreOf(game, events)
+  return a === b && game.penalty_winner_id != null
 }
 
 export const minuteOf = (game, now = Date.now()) =>

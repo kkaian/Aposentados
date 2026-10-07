@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Spinner } from '../components/ui'
 import { addMonths, dayLabel, monthLabel, monthStart, todayISO } from '../lib/dates'
-import { daySummary, makeNamer, scoreOf } from '../lib/games'
+import { daySummary, makeNamer, scoreOf, wonOnPenalties } from '../lib/games'
 import { supabase } from '../lib/supabase'
 import { fetchTeams } from '../lib/teams'
 
@@ -116,6 +116,7 @@ export default function Historico() {
                     <span className="w-14 text-xs text-muted">Jogo {g.number}</span>
                     <span className="flex-1 truncate">
                       {label[g.team1_id]} <b>{a} x {b}</b> {label[g.team2_id]}
+                      {wonOnPenalties(g, events) && <span className="text-xs text-muted"> · pên.: {label[g.penalty_winner_id]}</span>}
                     </span>
                     <span className="text-xs font-semibold text-action">Ver eventos</span>
                   </Link>

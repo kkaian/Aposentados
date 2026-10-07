@@ -9,7 +9,7 @@ import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
 import { dayLabel, timeLabel } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
-import { fetchPeladaGames, GAME_STATUS_LABEL, scoreOf } from '../lib/games'
+import { fetchPeladaGames, GAME_STATUS_LABEL, scoreOf, wonOnPenalties } from '../lib/games'
 import { fetchCurrentPelada } from '../lib/peladas'
 import { supabase } from '../lib/supabase'
 import { fetchTeams } from '../lib/teams'
@@ -177,6 +177,7 @@ export default function PeladaHoje() {
               <span className="min-w-0 flex-1 truncate text-right">{teamById[g.team1_id]?.label}</span>
               <b className="text-base whitespace-nowrap tabular-nums">
                 {a} x {b}
+                {wonOnPenalties(g, events) && <span className="block text-center text-[10px] font-normal text-muted">pên.: {g.penalty_winner_id === g.team1_id ? '◀' : '▶'}</span>}
               </b>
               <span className="min-w-0 flex-1 truncate">{teamById[g.team2_id]?.label}</span>
             </div>

@@ -94,6 +94,7 @@ Vou/Não vou, limite de vagas e lista de espera pela ordem de resposta, atualiza
 ### Jogo ao vivo
 
 - O jogo termina com **10 min ou 2 gols**: o app avisa e mostra o placar final com "Salvar resultado". Depois de salvo, só admin corrige.
+- **Empate:** ao salvar, escolhe-se "Empate" ou qual time **venceu nos pênaltis**. Vitória nos pênaltis conta como vitória (pódio, troféus, Seleção do mês); os gols dos pênaltis não entram no placar. Admin pode trocar depois.
 - **Responsável pelo registro:** quem inicia o jogo. Um por vez; pode passar para um ajudante ou admin, o admin assume ou libera. Os outros acompanham ao vivo com os botões trancados.
 - **Eventos:** gol (com passo 2: assistência ou "sem assistência"), gol contra (conta para o adversário e não entra no ranking de gols), cartão amarelo e vermelho (só registro, sem suspensão) e substituição.
 - **Substituição parcial:** entra mensalista, diarista, avulso ou **alguém de outro time**. **Emprestar jogador:** coloca alguém em campo sem tirar ninguém (lesão, time com 4). Os dois valem só para aquele jogo; no próximo jogo do time dele, o jogador volta ao time original.
@@ -219,6 +220,9 @@ Ideias para depois:
 - Sem login com Google; recuperação de acesso pelo admin.
 - Notas mudam 1 vez por pelada (antes era 1 vez por mês).
 - Mensalidade vale para os mensalistas do momento em que a cobrança é criada.
+- Empate pode ser decidido nos pênaltis e conta como vitória.
+- A escolha dos times termina antes do horário da pelada (o que faltar é sorteado).
+- Pelada de 04/10/2026 (feita no papel) lançada direto no banco.
 
 ## 12. Onde os wireframes estão desatualizados
 
