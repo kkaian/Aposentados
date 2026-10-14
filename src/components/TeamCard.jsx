@@ -9,8 +9,9 @@ function PresenceMark({ answer }) {
   return <CircleHelp size={13} className="flex-none text-gold" aria-label="dúvida" />
 }
 
-export default function TeamCard({ team, slots = 0, onMemberClick, onSlotClick, selectedId }) {
+export default function TeamCard({ team, slots = 0, onMemberClick, onSlotClick, onAdd, onRestore, selectedId }) {
   const empty = Math.max(0, slots - team.active.length)
+  const out = onRestore ? team.members.filter((m) => m.is_out) : []
   return (
     <div className="rounded-xl border border-line p-2.5">
       <div className="mb-2 flex items-center gap-2">
@@ -54,6 +55,17 @@ export default function TeamCard({ team, slots = 0, onMemberClick, onSlotClick, 
           vaga
         </div>
       ))}
+      {out.map((m) => (
+        <button key={m.id} type="button" onClick={() => onRestore(m, team)} className="flex h-7 w-full items-center gap-1.5 text-left text-[12px] text-muted">
+          <span className="flex-1 truncate line-through">{m.name}</span>
+          <span className="font-semibold text-action">Desfazer</span>
+        </button>
+      ))}
+      {onAdd && (
+        <button type="button" onClick={() => onAdd(team)} className="mt-1 h-7 w-full rounded border border-dashed border-line-2 text-[12px] font-semibold text-action">
+          + Adicionar
+        </button>
+      )}
     </div>
   )
 }

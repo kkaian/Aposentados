@@ -1,11 +1,13 @@
 import { ArrowLeftRight, Lock, Pencil, Play, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import DangerSheet from '../components/DangerSheet'
 import Sheet from '../components/Sheet'
 import TeamShield from '../components/TeamShield'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
+import { dayLabel } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
 import { describeEvent, EVENT_LABEL, fetchGame, GAME_GOALS, GAME_MINUTES, makeNamer, minuteOf, scoreOf } from '../lib/games'
 import { photoUrl } from '../lib/storage'
@@ -41,6 +43,7 @@ function Btn({ children, className = '', ...props }) {
 
 export default function Jogo() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { profile } = useAuth()
   const isAdmin = isAdminRole(profile)
   const [data, setData] = useState()
@@ -167,7 +170,12 @@ export default function Jogo() {
   return (
     <div className="pb-6">
       <div className="border-b border-line px-4 pt-2 pb-3 text-center">
-        <div className="text-xs text-muted">Jogo {game.number} · Pelada de hoje</div>
+        <div className="text-xs text-muted">
+          Jogo {game.number} ·{' '}
+          <Link to={`/pelada/${pelada.id}`} className="font-semibold text-action">
+            pelada de {dayLabel(pelada.date)}
+          </Link>
+        </div>
         <div className="mt-2 flex items-center justify-center gap-3">
           <div className="flex flex-1 flex-col items-center gap-1">
             <TeamShield team={team1} size={40} />
@@ -262,6 +270,14 @@ export default function Jogo() {
         </div>
       )}
 
+      {profile.role === 'dono' && (
+        <div className="px-4 pt-4">
+          <button className="flex h-11 w-full items-center justify-center gap-2 text-sm text-[#F29A8E]" onClick={() => setSheet({ kind: 'excluir' })}>
+            <Trash2 size={16} /> Excluir jogo
+          </button>
+        </div>
+      )}
+
       {sheet?.kind === 'acao' && (
         <Sheet title={name(sheet.person.profile_id, sheet.person.guest_id)} subtitle={`${sheet.person.team_id === team1?.id ? team1?.label : team2?.label} · ${statsOf(sheet.person)}`} onClose={() => setSheet(null)}>
           <div className="mb-2 text-sm font-semibold">O que aconteceu?</div>
@@ -280,6 +296,15 @@ export default function Jogo() {
               Cartão vermelho
             </Btn>
           </div>
+          <div className="mt-4 mb-1 text-xs font-semibold tracking-wide text-muted uppercase">Corrigir</div>
+          <button className="flex min-h-12 w-full items-center border-b border-row text-left" onClick={() => setSheet({ kind: 'naojogou', person: sheet.person })}>
+            Não jogou este jogo (tirar do jogo)
+          </button>
+          {isAdmin && (
+            <button className="flex min-h-12 w-full items-center border-b border-row text-left text-[#F29A8E]" onClick={() => setSheet({ kind: 'faltou', person: sheet.person })}>
+              Faltou à pelada (tirar de todos os jogos)
+            </button>
+          )}
           <button className="mt-3 h-11 w-full text-sm text-muted" onClick={() => setSheet(null)}>
             Cancelar
           </button>
@@ -451,6 +476,68 @@ export default function Jogo() {
             Cancelar
           </button>
         </Sheet>
+      )}
+
+      {sheet?.kind === 'naojogou' && (
+        <Sheet
+          title={`${name(sheet.person.profile_id, sheet.person.guest_id)} não jogou?`}
+          subtitle={`Sai do jogo ${game.number}: não conta jogo nem vitória. Substituições dele somem da linha do tempo, mas quem entrou no lugar continua. Também serve para desfazer um empréstimo.`}
+          onClose={() => setSheet(null)}
+        >
+          <button
+            className="btn w-full"
+            disabled={busy}
+            onClick={() => rpc('remove_from_game', { p_game: game.id, p_profile: sheet.person.profile_id ?? null, p_guest: sheet.person.guest_id ?? null }, () => setSheet(null))}
+          >
+            Tirar do jogo
+          </button>
+          <p className="mt-1 text-xs text-muted">Se ele tiver gol, assistência ou cartão neste jogo, exclua esses eventos antes.</p>
+          <div className="mt-2">
+            <Notice>{msg}</Notice>
+          </div>
+          <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setSheet(null)}>
+            Cancelar
+          </button>
+        </Sheet>
+      )}
+
+      {sheet?.kind === 'faltou' && (
+        <Sheet
+          title={`${name(sheet.person.profile_id, sheet.person.guest_id)} faltou?`}
+          subtitle="Sai de todos os jogos desta pelada e do time: não conta jogo, vitória nem Seleção do mês. Quem entrou no lugar dele continua valendo."
+          onClose={() => setSheet(null)}
+        >
+          <button
+            className="btn w-full border-[#B3362B] bg-[#B3362B]"
+            disabled={busy}
+            onClick={() => rpc('mark_absent', { p_pelada: pelada.id, p_profile: sheet.person.profile_id ?? null, p_guest: sheet.person.guest_id ?? null }, () => setSheet(null))}
+          >
+            Marcar que faltou
+          </button>
+          <p className="mt-1 text-xs text-muted">
+            {pelada.status === 'encerrada' ? 'Pelada encerrada: ele só sai, sem abrir vaga.' : 'Fica uma vaga de diarista no time dele.'} Se ele tiver gol, assistência ou cartão, exclua esses eventos antes.
+          </p>
+          <div className="mt-2">
+            <Notice>{msg}</Notice>
+          </div>
+          <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setSheet(null)}>
+            Cancelar
+          </button>
+        </Sheet>
+      )}
+
+      {sheet?.kind === 'excluir' && (
+        <DangerSheet
+          title={`Excluir o jogo ${game.number}?`}
+          subtitle={`${team1?.label} ${score[0]} x ${score[1]} ${team2?.label}. Somem os gols, cartões e quem jogou. Os jogos seguintes mudam de número.`}
+          action="Excluir jogo"
+          onClose={() => setSheet(null)}
+          onConfirm={async (text) => {
+            const res = await supabase.rpc('delete_game', { p_game: game.id, p_confirm: text })
+            if (!res.error) navigate(`/pelada/${pelada.id}`, { replace: true })
+            return res
+          }}
+        />
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import { Copy, Crown, KeyRound, Search } from 'lucide-react'
+import { Copy, Crown, KeyRound, Pencil, Search } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import Avatar from '../../components/Avatar'
 import Sheet from '../../components/Sheet'
@@ -20,10 +20,14 @@ export default function Permissoes() {
   const [transferOpen, setTransferOpen] = useState(false)
   const [newOwner, setNewOwner] = useState(null)
   const [access, setAccess] = useState(null)
+  const [editing, setEditing] = useState(null)
+  const [inactive, setInactive] = useState([])
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('id, name, username, role, type, photo_path').eq('status', 'ativo')
-    setPlayers((data ?? []).sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.name.localeCompare(b.name)))
+    const { data } = await supabase.from('profiles').select('id, name, username, role, type, photo_path, status').in('status', ['ativo', 'inativo'])
+    const all = (data ?? []).sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.name.localeCompare(b.name))
+    setPlayers(all.filter((p) => p.status === 'ativo'))
+    setInactive(all.filter((p) => p.status === 'inativo'))
   }, [])
 
   useEffect(() => {
@@ -40,6 +44,17 @@ export default function Permissoes() {
       setMsg({ ok: admin ? `${p.name} agora é admin (e mensalista).` : `${p.name} não é mais admin.` })
       load()
     }
+  }
+
+  async function run(key, request, ok) {
+    setBusy(key)
+    setMsg({})
+    const { error } = await request
+    setBusy(null)
+    if (error) return setMsg({ error: friendlyError(error) })
+    setEditing(null)
+    setMsg({ ok })
+    load()
   }
 
   async function transfer() {
@@ -93,9 +108,14 @@ export default function Permissoes() {
             </div>
           </div>
           {(p.role !== 'dono' || isOwner) && (
-            <button className="flex h-10 w-10 items-center justify-center text-muted" aria-label={`Recuperar acesso de ${p.name}`} onClick={() => setAccess({ player: p })}>
-              <KeyRound size={18} />
-            </button>
+            <>
+              <button className="flex h-10 w-9 items-center justify-center text-muted" aria-label={`Editar ${p.name}`} onClick={() => setEditing({ player: p, name: p.name })}>
+                <Pencil size={17} />
+              </button>
+              <button className="flex h-10 w-9 items-center justify-center text-muted" aria-label={`Recuperar acesso de ${p.name}`} onClick={() => setAccess({ player: p })}>
+                <KeyRound size={18} />
+              </button>
+            </>
           )}
           {p.role === 'dono' ? (
             <span className="flex items-center gap-1 text-sm font-semibold text-gold">
@@ -116,6 +136,29 @@ export default function Permissoes() {
           )}
         </div>
       ))}
+
+      {inactive.length > 0 && (
+        <>
+          <SectionLabel>Desativados · {inactive.length}</SectionLabel>
+          {inactive.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 border-b border-row px-4 py-2">
+              <Avatar name={p.name} src={photoUrl(p.photo_path)} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-muted">{p.name}</div>
+                <div className="text-xs text-muted">@{p.username}</div>
+              </div>
+              <button
+                className="btn-ghost h-9 px-3 text-sm"
+                disabled={busy === p.id}
+                onClick={() => run(p.id, supabase.rpc('set_player_active', { p_profile: p.id, p_active: true }), `${p.name} reativado.`)}
+              >
+                Reativar
+              </button>
+            </div>
+          ))}
+          <p className="px-4 pt-2 text-xs text-muted">Mensalista volta só se houver vaga na cota.</p>
+        </>
+      )}
 
       {isOwner && (
         <div className="card mx-4 mt-4">
@@ -164,6 +207,37 @@ Senha temporária: ${access.password}`).then(() => setMsg({ ok: 'Copiado.' }), (
           )}
           <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setAccess(null)}>
             Fechar
+          </button>
+        </Sheet>
+      )}
+
+      {editing && (
+        <Sheet title={`Editar ${editing.player.name}`} subtitle={`@${editing.player.username} · ${editing.player.type}`} onClose={() => setEditing(null)}>
+          <label className="label" htmlFor="edit-name">Nome que aparece no app</label>
+          <input id="edit-name" className="field" maxLength={40} value={editing.name} onChange={(e) => setEditing((x) => ({ ...x, name: e.target.value }))} />
+          <button
+            className="btn mt-3 w-full"
+            disabled={!editing.name.trim() || editing.name.trim() === editing.player.name || busy !== null}
+            onClick={() => run('rename', supabase.rpc('admin_rename', { p_profile: editing.player.id, p_name: editing.name }), 'Nome corrigido.')}
+          >
+            Salvar nome
+          </button>
+          {editing.player.role !== 'dono' && (editing.player.role !== 'admin' || isOwner) && editing.player.id !== me.id && (
+            <>
+              <button
+                className="mt-4 h-11 w-full rounded-lg border-2 border-[#B3362B] font-semibold text-[#F29A8E]"
+                disabled={busy !== null}
+                onClick={() => run('off', supabase.rpc('set_player_active', { p_profile: editing.player.id, p_active: false }), `${editing.player.name} desativado.`)}
+              >
+                Desativar (saiu do grupo)
+              </button>
+              <p className="mt-1 text-xs text-muted">
+                Some das listas e não entra mais no app. Os jogos e o histórico ficam, e dá para reativar depois. Mensalista desativado libera a vaga da cota e sai do pódio.
+              </p>
+            </>
+          )}
+          <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setEditing(null)}>
+            Cancelar
           </button>
         </Sheet>
       )}

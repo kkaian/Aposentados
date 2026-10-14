@@ -1,10 +1,12 @@
-import { Plus, X } from 'lucide-react'
+import { Plus, RotateCcw, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import DangerSheet from '../../components/DangerSheet'
 import PlayerPicker from '../../components/PlayerPicker'
 import Sheet from '../../components/Sheet'
 import { AdminBadge, Notice, SectionLabel, Spinner } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
+import { dayLabel } from '../../lib/dates'
 import { friendlyError } from '../../lib/errors'
 import { fetchActivePlayers, nextSundayISO, PELADA_STATUS_LABEL } from '../../lib/peladas'
 import { supabase } from '../../lib/supabase'
@@ -50,6 +52,8 @@ export default function PeladaForm() {
   const [diaristasOk, setDiaristasOk] = useState(true)
   const [picker, setPicker] = useState(null)
   const [cancelOpen, setCancelOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const isOwner = profile.role === 'dono'
   const [msg, setMsg] = useState({})
   const [busy, setBusy] = useState(false)
 
@@ -127,6 +131,18 @@ export default function PeladaForm() {
     const { error } = await q
     if (error) setMsg({ error: friendlyError(error) })
     else setIds(on ? ids.filter((x) => x !== person.id) : [...ids, person.id])
+  }
+
+  // encerrada (só o dono) volta para em andamento; cancelada volta para agendada
+  async function reopen() {
+    setBusy(true)
+    setMsg({})
+    const { error } = await supabase.rpc('reopen_pelada', { p_pelada: Number(id) })
+    setBusy(false)
+    if (error) return setMsg({ error: friendlyError(error) })
+    const { data } = await supabase.from('peladas').select('*').eq('id', id).single()
+    setPelada(data)
+    setMsg({ ok: data.status === 'agendada' ? 'Pelada reativada.' : 'Pelada reaberta: encerre de novo depois de corrigir.' })
   }
 
   async function cancelPelada() {
@@ -231,6 +247,38 @@ export default function PeladaForm() {
         </div>
       )}
 
+      {!isNew && (
+        <div className="space-y-1 px-4 pt-3">
+          <Link to={`/pelada/${id}`} className="btn-ghost flex items-center justify-center text-sm">
+            Abrir pelada (times e jogos)
+          </Link>
+          {(pelada.status === 'cancelada' || (pelada.status === 'encerrada' && isOwner)) && (
+            <button className="btn-ghost flex w-full items-center justify-center gap-2 text-sm" disabled={busy} onClick={reopen}>
+              <RotateCcw size={16} /> {pelada.status === 'cancelada' ? 'Reativar pelada (cancelada por engano)' : 'Reabrir pelada encerrada'}
+            </button>
+          )}
+          {isOwner && (
+            <button className="flex h-11 w-full items-center justify-center gap-2 text-sm text-[#F29A8E]" onClick={() => setDeleteOpen(true)}>
+              <Trash2 size={16} /> Excluir pelada
+            </button>
+          )}
+        </div>
+      )}
+
+      {deleteOpen && (
+        <DangerSheet
+          title={`Excluir a pelada de ${dayLabel(pelada.date)}?`}
+          subtitle="Some tudo dela: times, jogos, gols, presença e avulsos, e os números saem do pódio. Dinheiro de diarista lançado no caixa é estornado."
+          action="Excluir pelada"
+          onClose={() => setDeleteOpen(false)}
+          onConfirm={async (text) => {
+            const res = await supabase.rpc('delete_pelada', { p_pelada: Number(id), p_confirm: text })
+            if (!res.error) navigate('/admin/peladas', { replace: true })
+            return res
+          }}
+        />
+      )}
+
       {picker === 'helpers' && (
         <PlayerPicker
           title="Ajudantes"
@@ -253,7 +301,7 @@ export default function PeladaForm() {
         />
       )}
       {cancelOpen && (
-        <Sheet title="Cancelar esta pelada?" subtitle="Ela some da tela inicial. Não dá para desfazer pelo app." onClose={() => setCancelOpen(false)}>
+        <Sheet title="Cancelar esta pelada?" subtitle="Ela some da tela inicial. Se foi engano, dá para reativar aqui mesmo." onClose={() => setCancelOpen(false)}>
           <button className="btn w-full border-[#B3362B] bg-[#B3362B]" onClick={cancelPelada}>
             Cancelar pelada
           </button>

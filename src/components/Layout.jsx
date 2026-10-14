@@ -49,7 +49,7 @@ const MENU = [
 const ADMIN_MENU = [
   { to: '/admin', label: 'Administração', icon: Settings },
   { to: '/admin/caixa', label: 'Caixa', icon: Landmark },
-  { to: '/admin/sorteio', label: 'Sorteio de times', icon: Shuffle },
+  { to: '/admin/sorteio', label: 'Sorteio ou montar times', icon: Shuffle },
   { to: '/admin/diarista', label: 'Adicionar diarista', icon: UserPlus },
 ]
 
@@ -69,6 +69,7 @@ const TITLES = {
 const PREFIX_TITLES = [
   ['/admin/peladas/nova', 'Criar pelada'],
   ['/jogo/', 'Jogo'],
+  ['/pelada/', 'Pelada'],
   ['/notas/', 'Avaliar jogador'],
   ['/admin/encerrar/', 'Encerrar pelada'],
   ['/jogador/', 'Jogador'],

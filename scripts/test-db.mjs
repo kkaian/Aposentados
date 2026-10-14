@@ -450,6 +450,194 @@ try {
     return 'fora'
   })
 
+  // corrigir e desfazer (faltou, editar times, excluir, reabrir)
+  await as(id('adm'))
+  const pel4 = (await one(`insert into peladas (date, start_time, location, max_slots) values ('2026-11-01','08:00','Campo',20) returning id`)).id
+  await q(`select save_sorteio($1, $2)`, [pel4, JSON.stringify([[id('j1'), id('j2'), id('j3')], [id('j4'), id('j5'), id('j6')]])])
+  const [ta, tb] = (await q(`select id from teams where pelada_id=$1 order by captain_order`, [pel4])).rows.map((r) => r.id)
+  const g4 = (await one(`select set_next_game($1,$2,$3) id`, [pel4, ta, tb])).id
+  await q(`select start_game($1)`, [g4])
+  await q(`insert into game_events (game_id, type, team_id, player_id, sub_in_id, minute) values ($1,'substituicao',$2,$3,$4,0)`, [g4, ta, id('j3'), id('j7')])
+  await q(`insert into game_events (game_id, type, team_id, player_id, minute) values ($1,'gol',$2,$3,2)`, [g4, ta, id('j1')])
+  await q(`select finish_game($1)`, [g4])
+  const g4b = (await one(`select set_next_game($1,$2,$3) id`, [pel4, ta, tb])).id
+  await q(`select start_game($1)`, [g4b])
+  await expect('ajudante tira do jogo ao vivo quem foi emprestado por engano', async () => {
+    await q(`insert into pelada_helpers values ($1,$2)`, [pel4, id('j10')])
+    await q(`select lend_player($1,$2,$3,null)`, [g4b, tb, id('j8')])
+    await as(id('j10'))
+    await q(`select remove_from_game($1,$2,null)`, [g4b, id('j8')])
+    const r = await one(`select count(*)::int n from game_lineup where game_id=$1 and profile_id=$2`, [g4b, id('j8')])
+    if (r.n) throw new Error('continua em campo')
+    return 'fora do jogo'
+  })
+  await as(id('adm'))
+  await q(`select finish_game($1)`, [g4b])
+  await q(`select close_pelada($1)`, [pel4])
+  const nov = async (n) => (await one(`select games, wins from player_month_stats where month='2026-11-01' and profile_id=$1`, [id(n)])) ?? { games: 0, wins: 0 }
+  await expect('quem saiu no minuto 0 ainda conta jogo e vitória (antes do "Faltou")', async () => {
+    const r = await nov('j3')
+    if (r.games !== 2 || r.wins !== 1) throw new Error(JSON.stringify(r))
+    return JSON.stringify(r)
+  })
+  await as(id('j5'))
+  await expect('jogador não marca falta de ninguém', () => q(`select mark_absent($1,$2,null)`, [pel4, id('j3')]), true)
+  await as(id('adm'))
+  await expect('"Faltou" recusa quem tem gol na pelada', () => q(`select mark_absent($1,$2,null)`, [pel4, id('j1')]), true)
+  await expect('"Faltou" com a pelada encerrada: sai dos jogos e do time, sem vaga', async () => {
+    await q(`select mark_absent($1,$2,null)`, [pel4, id('j3')])
+    const s = await nov('j3')
+    const j7 = await nov('j7')
+    const m = await one(`select is_out, (select count(*)::int from team_members where pelada_id=$1 and is_slot) vagas, (select count(*)::int from game_events where game_id=$3 and type='substituicao') subs from team_members where pelada_id=$1 and profile_id=$2`, [pel4, id('j3'), g4])
+    if (s.games || !m.is_out || m.vagas || m.subs || j7.games !== 1) throw new Error(JSON.stringify({ s, m, j7 }))
+    return 'j3: 0 jogos; j7 (entrou no lugar) continua com o jogo'
+  })
+  await expect('time: não põe de volta quem saiu por outro caminho', () => q(`select add_member($1,$2,null)`, [tb, id('j3')]), true)
+  await as(id('j5'))
+  await expect('jogador não edita times', () => q(`select vacate_member(id) from team_members where pelada_id=$1 and profile_id=$2`, [pel4, id('j2')]), true)
+  await as(id('adm'))
+  await expect('admin troca quem está na posição (com conta -> avulso)', async () => {
+    const m = await one(`select id from team_members where pelada_id=$1 and profile_id=$2`, [pel4, id('j2')])
+    await q(`select swap_member($1,null,'Avulso Certo')`, [m.id])
+    const r = await one(`select g.name from team_members tm join guests g on g.id=tm.guest_id where tm.id=$1`, [m.id])
+    return r.name
+  })
+  await expect('tirar do time vira vaga; vaga pode ser excluída e criada', async () => {
+    const m = await one(`select id from team_members where pelada_id=$1 and profile_id=$2`, [pel4, id('j5')])
+    await q(`select vacate_member($1)`, [m.id])
+    const slot = await one(`select is_slot from team_members where id=$1`, [m.id])
+    await q(`select delete_slot($1)`, [m.id])
+    await q(`select add_slot($1)`, [tb])
+    const n = (await one(`select count(*)::int n from team_members where team_id=$1 and is_slot`, [tb])).n
+    if (!slot.is_slot || n !== 1) throw new Error(JSON.stringify({ slot, n }))
+    return '1 vaga'
+  })
+  await expect('admin coloca alguém e muda de time', async () => {
+    await q(`select add_member($1,$2,null)`, [tb, id('j9')])
+    const m = await one(`select id from team_members where pelada_id=$1 and profile_id=$2`, [pel4, id('j9')])
+    await q(`select move_member($1,$2)`, [m.id, ta])
+    return (await one(`select team_id = $2 ok from team_members where id=$1`, [m.id, ta])).ok ? 'mudou' : 'não mudou'
+  })
+  await expect('desfazer saída: volta ao time e consta como "vai"', async () => {
+    const m = await one(`select id from team_members where pelada_id=$1 and profile_id=$2`, [pel4, id('j3')])
+    await q(`select restore_member($1)`, [m.id])
+    const r = await one(`select tm.is_out, p.answer from team_members tm join presence p on p.pelada_id=tm.pelada_id and p.profile_id=tm.profile_id where tm.id=$1`, [m.id])
+    if (r.is_out || r.answer !== 'vou') throw new Error(JSON.stringify(r))
+    return 'de volta'
+  })
+  await expect('desfazer saída segue a corrente (vaga preenchida e depois trocada)', async () => {
+    const pel6 = (await one(`insert into peladas (date, start_time, location, max_slots) values ('2026-11-08','08:00','Campo',20) returning id`)).id
+    await q(`select save_sorteio($1, $2)`, [pel6, JSON.stringify([[id('j1'), id('j2')], [id('j4'), id('j5')]])])
+    await q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'nao_vou')`, [pel6, id('j2')])
+    const slot = await one(`select id from team_members where pelada_id=$1 and is_slot`, [pel6])
+    await q(`select fill_slot($1,null,'André')`, [slot.id])
+    await q(`select replace_member($1,null,'Diarista')`, [slot.id])
+    const kim = await one(`select id, team_id from team_members where pelada_id=$1 and profile_id=$2`, [pel6, id('j2')])
+    await q(`select restore_member($1)`, [kim.id])
+    const r = await one(`select count(*)::int n, count(*) filter (where profile_id = $2 and not is_out)::int volta from team_members where team_id=$1`, [kim.team_id, id('j2')])
+    if (r.n !== 2 || r.volta !== 1) throw new Error(JSON.stringify(r))
+    return 'time volta a ter 2 (sem André nem "Diarista")'
+  })
+
+  await expect('admin não reabre pelada encerrada (só o dono)', () => q(`select reopen_pelada($1)`, [pel4]), true)
+  await as(id('dono'))
+  await expect('dono reabre a pelada: os números saem do mês até encerrar de novo', async () => {
+    await q(`select reopen_pelada($1)`, [pel4])
+    const r = await nov('j1')
+    await q(`select close_pelada($1)`, [pel4])
+    const back = await nov('j1')
+    if (r.games || back.games !== 2) throw new Error(JSON.stringify({ r, back }))
+    return 'saiu e voltou'
+  })
+  await expect('excluir jogo exige digitar "aposentados fc"', () => q(`select delete_game($1, 'aposentados')`, [g4]), true)
+  await as(id('adm'))
+  await expect('admin não exclui jogo (só o dono)', () => q(`select delete_game($1, 'aposentados fc')`, [g4]), true)
+  await as(id('dono'))
+  await expect('dono exclui o jogo 1 e o jogo 2 vira jogo 1', async () => {
+    await q(`select delete_game($1, '  Aposentados   FC ')`, [g4])
+    const r = await q(`select number from games where pelada_id=$1`, [pel4])
+    if (r.rows.length !== 1 || r.rows[0].number !== 1) throw new Error(JSON.stringify(r.rows))
+    return 'renumerado'
+  })
+  await expect('dono exclui a pelada e o dinheiro de diarista dela é estornado', async () => {
+    const slot = await one(`select id from team_members where pelada_id=$1 and is_slot limit 1`, [pel4])
+    await q(`select fill_slot($1,null,'Pagante',15,$2)`, [slot.id, id('dono')])
+    await q(`select delete_pelada($1, 'aposentados fc')`, [pel4])
+    const r = await one(`select (select count(*)::int from peladas where id=$1) peladas, (select void_reason from cash_entries where payer_name='Pagante') motivo`, [pel4])
+    if (r.peladas || r.motivo !== 'Pelada excluída') throw new Error(JSON.stringify(r))
+    return 'excluída, estorno com motivo'
+  })
+
+  await as(id('adm'))
+  const pel5 = (await one(`insert into peladas (date, start_time, location, max_slots) values ('2026-12-06','08:00','Campo',20) returning id`)).id
+  await q(`select define_captains($1, $2)`, [pel5, [id('j1'), id('j2'), id('j3'), id('j4')]])
+  await expect('nada para desfazer antes da 1ª escolha', () => q(`select draft_undo($1)`, [pel5]), true)
+  await expect('admin desfaz a última escolha e a vez volta para o capitão', async () => {
+    await as(id('j1'))
+    await q(`select draft_pick($1,$2)`, [pel5, id('j5')])
+    await expect_fail(() => q(`select draft_undo($1)`, [pel5]))
+    await as(id('adm'))
+    await q(`select draft_undo($1)`, [pel5])
+    const r = await one(`select next_pick, (select count(*)::int from team_members where pelada_id=$1 and profile_id=$2) j5 from drafts where pelada_id=$1`, [pel5, id('j5')])
+    if (r.next_pick !== 1 || r.j5) throw new Error(JSON.stringify(r))
+    await as(id('j1'))
+    await q(`select draft_pick($1,$2)`, [pel5, id('j6')])
+    return 'capitão 1 escolheu de novo'
+  })
+  await as(id('adm'))
+  await expect('times não se editam durante a escolha', () => q(`select add_slot(id) from teams where pelada_id=$1 limit 1`, [pel5]), true)
+  await expect('pelada cancelada por engano volta a ser agendada', async () => {
+    await q(`update peladas set status='cancelada' where id=$1`, [pel5])
+    await q(`select reopen_pelada($1)`, [pel5])
+    return (await one(`select status from peladas where id=$1`, [pel5])).status
+  })
+
+  await expect('admin desativa e reativa um jogador', async () => {
+    await q(`select set_player_active($1, false)`, [id('j10')])
+    const off = (await one(`select status from profiles where id=$1`, [id('j10')])).status
+    await q(`select set_player_active($1, true)`, [id('j10')])
+    return `${off} -> ${(await one(`select status from profiles where id=$1`, [id('j10')])).status}`
+  })
+  await expect('admin não desativa o dono', () => q(`select set_player_active($1, false)`, [id('dono')]), true)
+  await expect('admin corrige o nome de um jogador', async () => {
+    await q(`select admin_rename($1, '  Nome Certo ')`, [id('j10')])
+    return (await one(`select name from profiles where id=$1`, [id('j10')])).name
+  })
+  await expect('jogador não muda nome de outro pela função', async () => { await as(id('j5')); return q(`select admin_rename($1, 'Hack')`, [id('j10')]) }, true)
+  await expect('cadastro recusado por engano pode ser aprovado', async () => {
+    await as(null)
+    await mkUser('rec', { username: 'u_rec', name: 'Recusado', invite_code: invite })
+    await as(id('adm'))
+    await q(`select review_signup($1, false)`, [id('rec')])
+    await q(`select review_signup($1, true)`, [id('rec')])
+    return (await one(`select status from profiles where id=$1`, [id('rec')])).status
+  })
+
+  await expect('jogador desfaz o "Já paguei" tocado sem querer', async () => {
+    await as(id('adm'))
+    const ct = (await one(`select create_cotinha('Bola', 30, null) id`)).id
+    await as(id('j5'))
+    await q(`select inform_payment($1)`, [ct])
+    await q(`select uninform_payment($1)`, [ct])
+    return (await one(`select status from payments where charge_id=$1 and profile_id=$2`, [ct, id('j5')])).status
+  })
+  await expect('cotinha: valor muda até alguém pagar; com pagamento, não exclui', async () => {
+    await as(id('adm'))
+    const ct = (await one(`select id from charges where title='Bola'`)).id
+    await q(`select update_charge($1,'Bola nova',35,null)`, [ct])
+    await q(`select confirm_payment($1,$2)`, [ct, id('j5')])
+    await expect_fail(() => q(`select update_charge($1,'Bola nova',40,null)`, [ct]))
+    await expect_fail(() => q(`select delete_charge($1)`, [ct]))
+    await q(`select unconfirm_payment($1,$2)`, [ct, id('j5')])
+    await q(`select delete_charge($1)`, [ct])
+    return (await one(`select count(*)::int n from charges where id=$1`, [ct])).n ? 'ainda existe' : 'excluída'
+  })
+  await expect('mensalidade do mês atual não se exclui', async () => {
+    await as(id('adm'))
+    const fee = (await one(`select id from charges where kind='mensalidade' and month=current_month()`)).id
+    return q(`select delete_charge($1)`, [fee])
+  }, true)
+
   // posse
   await as(id('dono'))
   await expect('dono passa a posse para adm', async () => { await q(`select transfer_ownership($1)`, [id('adm')]); const r = await q(`select username, role from profiles where role in ('dono','admin') order by 1`); return r.rows.map((x) => x.username + '=' + x.role).join(', ') })

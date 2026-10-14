@@ -128,6 +128,11 @@ export default function Pagamentos() {
               Já paguei
             </button>
           )}
+          {p.status === 'informado' && (
+            <button className="h-9 px-1 text-xs text-muted" disabled={busy === p.charge_id} onClick={() => run(p.charge_id, 'uninform_payment', { p_charge: p.charge_id }, 'Aviso desfeito: a cobrança voltou para pendente.')}>
+              Desfazer
+            </button>
+          )}
         </div>
       ))}
       {open.length > 0 && <p className="px-4 pt-2 text-xs text-muted">Depois de pagar o Pix, toque em "Já paguei". Um admin confirma o recebimento.</p>}
@@ -164,6 +169,13 @@ export default function Pagamentos() {
                 <div className="truncate">{playerById[p.profile_id]?.name}</div>
                 <div className="text-xs text-muted">{chargeById[p.charge_id] && chargeTitle(chargeById[p.charge_id])}</div>
               </div>
+              <button
+                className="h-9 px-1 text-xs text-muted"
+                disabled={busy !== null}
+                onClick={() => run(`n${p.charge_id}${p.profile_id}`, 'uninform_payment', { p_charge: p.charge_id, p_profile: p.profile_id }, `Aviso de ${playerById[p.profile_id]?.name} desfeito: voltou para pendente.`)}
+              >
+                Não recebi
+              </button>
               <button className="btn h-9 px-3 text-sm" disabled={busy !== null} onClick={() => setConfirmFor({ charge: chargeById[p.charge_id], profile: playerById[p.profile_id], holder: profile.id })}>
                 Confirmar
               </button>
@@ -264,7 +276,24 @@ export default function Pagamentos() {
               </div>
             ))}
           <p className="mt-2 text-xs text-muted">Dispensar tira a pessoa desta cobrança (ex.: entrou no fim do mês). Desfazer volta um pagamento confirmado por engano.</p>
+          <button className="btn-ghost mt-3 w-full" onClick={() => setSheet({ kind: 'editar', charge: sheet.charge })}>
+            Editar ou excluir esta cobrança
+          </button>
         </Sheet>
+      )}
+
+      {sheet?.kind === 'editar' && (
+        <EditChargeSheet
+          charge={sheet.charge}
+          title={chargeTitle(sheet.charge)}
+          canDelete={sheet.charge.kind === 'cotinha' || sheet.charge.month > thisMonth}
+          onClose={() => setSheet(null)}
+          onSaved={(ok) => {
+            setSheet(null)
+            setMsg({ ok })
+            load()
+          }}
+        />
       )}
 
       {sheet?.kind === 'cotinha' && <CotinhaSheet onClose={() => setSheet(null)} onSaved={load} />}
@@ -326,6 +355,68 @@ function CotinhaSheet({ onClose, onSaved }) {
       <button className="btn mt-3 w-full" disabled={!form.title.trim() || !(Number(form.amount) > 0)} onClick={save}>
         Criar cotinha
       </button>
+      <button className="mt-2 h-11 w-full text-sm text-muted" onClick={onClose}>
+        Cancelar
+      </button>
+    </Sheet>
+  )
+}
+
+// Corrige nome, valor e vencimento; o valor só muda se ninguém pagou. Excluir: cotinha ou mensalidade futura sem pagos.
+function EditChargeSheet({ charge, title, canDelete, onClose, onSaved }) {
+  const [form, setForm] = useState({ title: charge.title, amount: String(charge.amount), due: charge.due_date ?? '' })
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  async function call(fn, args, ok) {
+    setBusy(true)
+    setError('')
+    const { error } = await supabase.rpc(fn, args)
+    setBusy(false)
+    if (error) setError(friendlyError(error))
+    else onSaved(ok)
+  }
+
+  return (
+    <Sheet title={`Editar: ${title}`} subtitle="O valor só muda enquanto ninguém tiver pagado." onClose={onClose}>
+      {charge.kind === 'cotinha' && (
+        <>
+          <label className="label" htmlFor="et">O que é</label>
+          <input id="et" className="field mb-3" maxLength={40} value={form.title} onChange={set('title')} />
+        </>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label" htmlFor="ea">Valor (R$)</label>
+          <input id="ea" className="field" type="number" min="0" step="0.01" inputMode="decimal" value={form.amount} onChange={set('amount')} />
+        </div>
+        <div>
+          <label className="label" htmlFor="ed">Vencimento</label>
+          <input id="ed" className="field" type="date" value={form.due} onChange={set('due')} />
+        </div>
+      </div>
+      <div className="mt-3">
+        <Notice>{error}</Notice>
+      </div>
+      <button
+        className="btn mt-3 w-full"
+        disabled={busy || !(Number(form.amount) > 0) || (charge.kind === 'cotinha' && !form.title.trim())}
+        onClick={() => call('update_charge', { p_charge: charge.id, p_title: form.title, p_amount: Number(form.amount), p_due: form.due || null }, 'Cobrança atualizada.')}
+      >
+        Salvar
+      </button>
+      {canDelete &&
+        (confirmDelete ? (
+          <button className="btn mt-2 w-full border-[#B3362B] bg-[#B3362B]" disabled={busy} onClick={() => call('delete_charge', { p_charge: charge.id }, 'Cobrança excluída.')}>
+            Confirmar: excluir para todos
+          </button>
+        ) : (
+          <button className="mt-2 h-11 w-full text-sm text-[#F29A8E]" onClick={() => setConfirmDelete(true)}>
+            Excluir cobrança (criada por engano)
+          </button>
+        ))}
       <button className="mt-2 h-11 w-full text-sm text-muted" onClick={onClose}>
         Cancelar
       </button>

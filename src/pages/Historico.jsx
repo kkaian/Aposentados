@@ -93,9 +93,12 @@ export default function Historico() {
         const label = Object.fromEntries(teams.map((t) => [t.id, t.label]))
         return (
           <div key={pelada.id} className="card mx-4 mt-3">
-            <div className="flex items-baseline justify-between">
+            <div className="flex items-baseline justify-between gap-2">
               <b>{dayLabel(pelada.date)}</b>
-              <span className="text-xs text-muted">{pelada.location}</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-muted">{pelada.location}</span>
+              <Link to={`/pelada/${pelada.id}`} className="text-xs font-semibold text-action">
+                Abrir pelada
+              </Link>
             </div>
             <div className="text-xs text-muted">
               {summary.games} jogos · {summary.goals} gols

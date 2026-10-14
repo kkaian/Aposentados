@@ -1,4 +1,4 @@
-import { Clock, Lock, Shirt, Users } from 'lucide-react'
+import { Clock, Lock, Shirt, Undo2, Users } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from '../components/Avatar'
@@ -102,6 +102,7 @@ export default function Times() {
   const [isHelper, setIsHelper] = useState(false)
   const [fill, setFill] = useState(null)
   const [changeCaptain, setChangeCaptain] = useState(null)
+  const [undo, setUndo] = useState(false)
   const ticking = useRef(false)
   const now = useNow()
 
@@ -210,7 +211,7 @@ export default function Times() {
                 Definir capitães
               </Link>
               <Link to="/admin/sorteio" className="btn-ghost flex items-center justify-center">
-                Sorteio (dia atípico)
+                Sorteio ou montar na mão (sem capitães)
               </Link>
             </div>
           )}
@@ -228,6 +229,15 @@ export default function Times() {
   const canPick = drafting && myTurn
   const showLock = drafting && !myTurn && (myTeam || isAdmin)
   const slots = teams.length === 4 && draft?.next_pick ? 5 : 0
+  // última escolha feita (para o admin desfazer); não existe em times do sorteio ou montados na mão
+  const lastPick = (() => {
+    if (!draft || draft.next_pick <= 1 || todayISO() > pelada.date || pelada.status !== 'agendada') return null
+    for (const team of teams) {
+      const member = team.members.find((m) => m.pick_number === draft.next_pick - 1)
+      if (member) return { team, member }
+    }
+    return null
+  })()
 
   return (
     <div className="pb-6">
@@ -292,10 +302,23 @@ export default function Times() {
           <Link to={`/admin/peladas/${pelada.id}/capitaes`} className="btn-ghost flex flex-1 items-center justify-center text-sm">
             Refazer capitães
           </Link>
-          <Link to="/admin/diarista" className="btn-ghost flex flex-1 items-center justify-center text-sm">
-            Adicionar diarista
-          </Link>
+          {drafting ? (
+            lastPick && (
+              <button className="btn-ghost flex flex-1 items-center justify-center gap-1.5 text-sm" onClick={() => setUndo(true)}>
+                <Undo2 size={15} /> Desfazer escolha
+              </button>
+            )
+          ) : (
+            <Link to="/pelada" className="btn-ghost flex flex-1 items-center justify-center text-sm">
+              Editar times
+            </Link>
+          )}
         </div>
+      )}
+      {isAdmin && !drafting && lastPick && (
+        <button className="mx-4 mt-2 flex h-10 w-[calc(100%-2rem)] items-center justify-center gap-1.5 text-xs text-muted" onClick={() => setUndo(true)}>
+          <Undo2 size={14} /> Desfazer a última escolha (reabre a escolha)
+        </button>
       )}
 
       {drafting && (
@@ -349,6 +372,33 @@ export default function Times() {
             pelada.
           </p>
         </>
+      )}
+      {undo && lastPick && (
+        <Sheet
+          title="Desfazer a última escolha?"
+          subtitle={`Escolha ${draft.next_pick - 1}: ${lastPick.member.name} sai do ${lastPick.team.label} e a vez volta para ${lastPick.team.captain?.name ?? 'o capitão'}${draft.phase === 'concluida' ? ' (a escolha reabre)' : ''}.`}
+          onClose={() => setUndo(false)}
+        >
+          <button
+            className="btn w-full"
+            disabled={busy !== null}
+            onClick={async () => {
+              setBusy('undo')
+              setError('')
+              const { error } = await supabase.rpc('draft_undo', { p_pelada: pelada.id })
+              setBusy(null)
+              setUndo(false)
+              if (error) setError(friendlyError(error))
+              load()
+            }}
+          >
+            Desfazer escolha
+          </button>
+          <p className="mt-1 text-xs text-muted">Nos turnos, o capitão ganha 10 min de novo. Não vale depois que a pelada começa.</p>
+          <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setUndo(false)}>
+            Cancelar
+          </button>
+        </Sheet>
       )}
       {changeCaptain && (
         <ChangeCaptainSheet

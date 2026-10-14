@@ -1,6 +1,6 @@
 # App do Aposentados FC — Especificação
 
-Documento de referência do app (atualizado em 06/10/2026, com tudo que foi decidido e implementado). Os wireframes originais (HTML) estão em `telas/` e o escudo em `escudo.jpeg`. Onde o texto e o desenho divergirem, **vale o texto** (ver seção 12).
+Documento de referência do app (atualizado em 14/10/2026, com tudo que foi decidido e implementado). Os wireframes originais (HTML) estão em `telas/` e o escudo em `escudo.jpeg`. Onde o texto e o desenho divergirem, **vale o texto** (ver seção 12).
 
 - **Site:** https://aposentados.vercel.app
 - **Código:** github.com/kkaian/Aposentados (público)
@@ -14,7 +14,7 @@ Site instalável (PWA) para a pelada: registra jogos, gols, assistências e cart
 - **Front:** React + Vite + Tailwind + `vite-plugin-pwa`. Ícones: `lucide-react`. Fonte Barlow.
 - **Back:** Supabase no plano gratuito (Postgres, Auth, Storage, RLS, Realtime e `pg_cron`). Sem servidor próprio: as regras ficam no banco (constraints, triggers e funções RPC).
 - **Hospedagem:** Vercel, que publica sozinha cada push na `main`. O endereço e a chave pública (`publishable`) do Supabase ficam em `src/lib/supabase.js`; a proteção dos dados é o RLS.
-- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (103 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
+- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (133 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
 - **Login:** só usuário + senha (sem Google). O Supabase usa um e-mail interno `usuario@aposentados.app`; a confirmação de e-mail fica desligada.
 - **Fotos e escudos:** reduzidos no celular antes de enviar (foto ~100 KB, escudo ~60 KB). Trocar a foto substitui a antiga. Limite de 200 KB por arquivo.
 - **Instalação:** item "Instalar app" no menu. No Android abre o aviso do Chrome (`beforeinstallprompt`); no iPhone mostra as instruções do Safari. O item some quando o app já está instalado. O app se atualiza sozinho (às vezes é preciso fechar e abrir).
@@ -28,7 +28,7 @@ Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#
 
 - **Barra inferior:** Início, Pelada, Pagamentos, Jogadores.
 - **Topo:** menu (☰), escudo, título e a foto do jogador (abre o próprio perfil).
-- **Menu lateral:** Início, Pelada de hoje, Jogadores, Histórico, Times da pelada, Avaliar colegas, Pagamentos, Perfil, Instalar app; seção Admin (Administração, Caixa, Sorteio de times, Adicionar diarista) só para admins; Sair.
+- **Menu lateral:** Início, Pelada de hoje, Jogadores, Histórico, Times da pelada, Avaliar colegas, Pagamentos, Perfil, Instalar app; seção Admin (Administração, Caixa, Sorteio ou montar times, Adicionar diarista) só para admins; Sair.
 
 **Cores dos times** (lista fixa):
 
@@ -87,13 +87,17 @@ Vou/Não vou, atualizando ao vivo. Marcam presença os mensalistas e os diarista
 6. **Kit e cor:** cada capitão escolhe um kit (nome + escudo, cadastrados juntos) e uma cor, **só na vez dele de escolher um jogador** Quando a escolha termina, o capitão que ficou **sem kit ou sem cor** recebe um aviso e pode completar **até o fim da véspera da pelada**; depois fica o padrão ("Time de Fulano", sem cor). Quem já escolheu os dois não muda mais; o admin ajusta sempre depois da escolha. Durante a escolha, **ninguém escolhe fora da vez, nem admin**: quem não está na vez vê um cadeado; o topo mostra "Vez de" + nome do capitão. Na mesma pelada, quem escolhe primeiro bloqueia o kit e a cor; na pelada seguinte tudo fica livre. Até escolher, o time aparece como "Time de Fulano".
 7. **Kits novos:** só se o admin liberar a criação (economia de armazenamento). Com a criação desligada, o capitão pode sugerir um kit e o admin aprova.
 8. **Trocar capitão (admin):** outro mensalista do mesmo time vira capitão (ex.: o capitão teve uma emergência). Time, escolhas, ordem, kit e cor continuam; a vez do time passa a ser do novo capitão. "Refazer capitães" continua existindo, mas apaga a escolha.
-9. **Sorteio (dia atípico, só admin):** marca quem joga, 2 a 4 times, opção de equilibrar pelo overall (sem overall conta como 3), troca manual tocando em dois jogadores. Substitui os times da pelada, desde que nenhum jogo tenha começado.
+9. **Sorteio ou montar na mão (dia atípico, admin):** marca quem joga, 2 a 4 times. Sorteio: opção de equilibrar pelo overall (sem overall conta como 3). Montar na mão: o admin escolhe o time de cada jogador, sem capitães. Nos dois, troca manual tocando em dois jogadores. Substitui os times da pelada, desde que nenhum jogo tenha começado.
+10. **Desfazer a última escolha (admin):** o jogador escolhido (ou a vaga) sai e a vez volta para o capitão (nos turnos, com 10 min de novo). Vale também depois de a escolha terminar, até o horário da pelada e antes do primeiro jogo.
+11. **Editar os times (admin, fora da escolha dos capitães, até depois de encerrada a pelada):** tocando no jogador: trocar por outra pessoa (corrige vaga preenchida errada), mudar de time, tirar do time (vira vaga) e corrigir o nome do avulso. No card do time: "+ Adicionar" (pessoa ou vaga vazia), "Desfazer" em quem saiu (volta ao time e quem entrou no lugar sai) e "Excluir vaga". Capitão não sai nem muda de time (use Trocar capitão).
 
 ### No dia da pelada
 
 - **Preencher vaga** (admin ou ajudante): avulso, diarista com conta ou mensalista de última hora. Opção "pagou para jogar" (valor e quem recebeu) vai para o caixa. Vaga não preenchida não entra em campo.
 - **Substituição integral** (admin): alguém que não vai sai do time e entra um diarista com conta ou avulso, com pagamento opcional para o caixa.
 - **Próximo jogo:** admin ou ajudante escolhe os dois times. Não há regra automática de quem fica ou sai.
+- **Faltou (admin):** quem não apareceu sai de **todos os jogos** da pelada e do time: não conta jogo, vitória nem Seleção do mês. Substituições dele somem da linha do tempo, mas quem entrou no lugar continua valendo. Pelada em andamento: fica vaga de diarista no lugar; encerrada: só sai. Bloqueado se ele tiver gol, assistência ou cartão (exclua antes). Fica no jogo (tocando no jogador) e na Pelada (tocando no jogador do time).
+- **Não jogou este jogo:** tira a pessoa só daquele jogo (admin; com o jogo ao vivo, também o ajudante, para desfazer um empréstimo).
 
 ### Jogo ao vivo
 
@@ -105,6 +109,8 @@ Vou/Não vou, atualizando ao vivo. Marcam presença os mensalistas e os diarista
 - **Créditos:** gols, assistências e vitória contam para o time em que o jogador esteve em campo naquela partida.
 - **Só admin edita ou exclui eventos.** Excluir uma substituição desfaz a troca em campo. Erro ao salvar mostra "Tentar de novo".
 - **Encerrar pelada** (admin, com todos os jogos finalizados): resumo do dia (artilheiro, garçom, time com mais vitórias). Só então os números entram no mês. Encerrar também libera as notas de novo.
+- **Reabrir pelada:** encerrada, só o dono (volta para em andamento e os números saem do mês até encerrar de novo); cancelada por engano, qualquer admin (volta para agendada).
+- **Excluir (só o dono, digitando "aposentados fc" para confirmar):** excluir um jogo (some com eventos e elenco; os jogos seguintes são renumerados) ou a pelada inteira (times, jogos, presença, avulsos; o dinheiro de diarista dela no caixa é estornado com o motivo "Pelada excluída").
 
 ### Pódio (aba Início)
 
@@ -128,6 +134,8 @@ Drible, chute, velocidade, defesa, passe e overall, de 1 a 5 estrelas. Só mensa
 - **Cotinhas:** cobranças extras (bola, colete), para os mensalistas.
 - **O jogador vê** todas as cobranças em aberto (atrasadas, do mês, adiantadas) e o histórico do que já pagou. Passou do vencimento sem pagar: "Atrasado".
 - **O admin vê** "X de Y pagos" por cobrança e pode confirmar, desfazer ou **dispensar** alguém.
+- **Desfazer "Já paguei":** o jogador desfaz o aviso tocado sem querer; o admin marca "Não recebi". Os dois voltam a cobrança para pendente.
+- **Editar ou excluir cobrança:** nome, valor e vencimento (o valor só muda enquanto ninguém tiver pagado). Excluir só cotinha ou mensalidade de mês futuro, sem pagamento confirmado.
 
 ### Caixa (só admins)
 
@@ -151,6 +159,8 @@ Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. i
 - **Cadastro:** código de convite (gerar um novo invalida o anterior) + aprovação do admin. Entra como diarista.
 - **Esqueci minha senha:** o jogador pede pelo app e o pedido aparece para o admin em Cadastros.
 - **Recuperar acesso:** em Jogadores e permissões, a chave ao lado do nome mostra o usuário e gera uma senha temporária para passar por fora do app. No próximo acesso o jogador é obrigado a criar a dele. O jogador também troca a senha pelo perfil.
+- **Editar jogador (lápis em Jogadores e permissões):** corrigir o nome e **desativar** quem saiu do grupo (some das listas e não entra mais; jogos e histórico ficam; mensalista libera a cota e sai do pódio). Admin só é desativado pelo dono; o dono nunca. "Reativar" na lista de desativados (mensalista só com vaga na cota).
+- **Cadastro recusado por engano:** em Cadastros, "Ver recusados" → Aprovar.
 
 ## 6. Telas
 
@@ -165,7 +175,7 @@ Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. i
 | Jogadores | `/jogadores` | logados | todos os jogadores com dono/admin, mensalista/diarista, overall; busca e filtros |
 | Perfil / Jogador | `/perfil`, `/jogador/:id` | logados | foto, estatísticas (mês/ano/geral), notas, troféus; trocar senha |
 | Presença | `/presenca` | logados | vão, não vão, sem resposta, espera |
-| Pelada de hoje | `/pelada` | logados | times, jogos do dia, próximo jogo, preencher vaga, encerrar |
+| Pelada de hoje / Pelada | `/pelada`, `/pelada/:id` | logados | times, jogos, próximo jogo, preencher vaga, editar times, faltou, encerrar, reabrir e excluir; `:id` abre qualquer pelada (link no Histórico) |
 | Times da pelada | `/times` | logados | escolha ao vivo, prazos, disponíveis, vaga de diarista |
 | Meu time | `/times/meu` | capitão/admin | kit e cor; criar ou sugerir kit |
 | Jogo | `/jogo/:id` | logados | placar, cronômetro, eventos, emprestar; detalhe depois de encerrado |
@@ -178,7 +188,7 @@ Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. i
 | Mensalistas e cota | `/admin/mensalistas` | admin | valor, vencimento, cota, em dia/atrasado |
 | Peladas | `/admin/peladas` | admin | lista, criar e editar (ajudantes, diaristas chamados) |
 | Definir capitães | `/admin/peladas/:id/capitaes` | admin | 4 capitães na ordem |
-| Sorteio | `/admin/sorteio` | admin | dia atípico |
+| Sorteio ou montar times | `/admin/sorteio` | admin | dia atípico: sorteio ou montar na mão |
 | Adicionar diarista | `/admin/diarista` | admin | substituição integral |
 | Encerrar pelada | `/admin/encerrar/:id` | admin | resumo do dia |
 | Caixa | `/admin/caixa` | admin | entradas, gastos, repasses, com quem está o dinheiro |
@@ -240,6 +250,7 @@ Ideias para depois:
 - Notificações por Web Push, sem custo, com os avisos da seção 5.
 - A escolha dos times termina antes do horário da pelada (o que faltar é sorteado).
 - Pelada de 04/10/2026 (feita no papel) lançada direto no banco.
+- 14/10/2026 (depois da pelada de 11/10): tudo que não tinha volta ganhou opção. Excluir pelada e jogo só o dono, digitando "aposentados fc"; excluir pelada estorna o dinheiro de diarista dela. Montar times na mão: dono e admins. "Faltou" tira dos jogos quem não foi (aplicado na pelada de 11/10). Também: editar times, desfazer última escolha, reabrir pelada, desativar/renomear jogador, aprovar recusado, desfazer "Já paguei", editar/excluir cobrança.
 
 ## 12. Onde os wireframes estão desatualizados
 

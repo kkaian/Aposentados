@@ -66,6 +66,7 @@ export default function App() {
         <Route path="/presenca" element={<Presenca />} />
         <Route path="/presenca/:id" element={<Presenca />} />
         <Route path="/pelada" element={<PeladaHoje />} />
+        <Route path="/pelada/:id" element={<PeladaHoje />} />
         <Route path="/jogo/:id" element={<Jogo />} />
         <Route path="/historico" element={<Historico />} />
         <Route path="/times" element={<Times />} />

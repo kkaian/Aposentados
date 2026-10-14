@@ -8,7 +8,7 @@ import Sheet from './Sheet'
 import { Notice, Segmented } from './ui'
 
 // Preencher "Vaga de diarista": avulso, diarista com conta ou mensalista de última hora
-export default function FillSlotSheet({ slot, team, teams, onClose, onDone }) {
+export default function FillSlotSheet({ slot, team, teams, canDelete, onClose, onDone }) {
   const { profile } = useAuth()
   const holders = useHolders()
   const [mode, setMode] = useState('conta')
@@ -94,6 +94,21 @@ export default function FillSlotSheet({ slot, team, teams, onClose, onDone }) {
       <button className="btn mt-3 w-full" disabled={!ready || busy} onClick={confirm}>
         Colocar no time
       </button>
+      {canDelete && (
+        <button
+          className="mt-2 h-11 w-full text-sm text-[#F29A8E]"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            const { error } = await supabase.rpc('delete_slot', { p_member: slot.id })
+            setBusy(false)
+            if (error) setError(friendlyError(error))
+            else onDone()
+          }}
+        >
+          Excluir vaga (o time fica com um a menos)
+        </button>
+      )}
       <button className="mt-2 h-11 w-full text-sm text-muted" onClick={onClose}>
         Cancelar
       </button>

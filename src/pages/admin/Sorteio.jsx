@@ -1,4 +1,4 @@
-import { Shuffle } from 'lucide-react'
+import { Hand, Shuffle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Avatar from '../../components/Avatar'
@@ -47,6 +47,8 @@ export default function Sorteio() {
   const [n, setN] = useState('2')
   const [balance, setBalance] = useState(true)
   const [result, setResult] = useState(null)
+  // montar na mão: jogador -> índice do time
+  const [manual, setManual] = useState(null)
   const [swap, setSwap] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -112,7 +114,7 @@ export default function Sorteio() {
           <AdminBadge />
         </div>
         <p className="px-4 text-sm text-muted">
-          {balance ? 'Sorteio equilibrado pelo overall.' : 'Sorteio livre.'} Toque em um jogador e depois em outro para trocar de time.
+          {manual ? 'Times montados na mão.' : balance ? 'Sorteio equilibrado pelo overall.' : 'Sorteio livre.'} Toque em um jogador e depois em outro para trocar de time.
         </p>
         {result.map((team, t) => (
           <div key={t}>
@@ -140,10 +142,75 @@ export default function Sorteio() {
           <button className="btn w-full" disabled={busy} onClick={confirm}>
             Confirmar times
           </button>
-          <button className="btn-ghost flex w-full items-center justify-center gap-2" onClick={() => setResult(draw(chosen, Number(n), balance))}>
-            <Shuffle size={16} /> Sortear de novo
+          {manual ? (
+            <button
+              className="btn-ghost flex w-full items-center justify-center gap-2"
+              onClick={() => {
+                // leva as trocas feitas aqui de volta para a montagem
+                setManual(Object.fromEntries(result.flatMap((team, t) => team.map((p) => [p.id, t]))))
+                setResult(null)
+              }}
+            >
+              <Hand size={16} /> Voltar e mudar na mão
+            </button>
+          ) : (
+            <button className="btn-ghost flex w-full items-center justify-center gap-2" onClick={() => setResult(draw(chosen, Number(n), balance))}>
+              <Shuffle size={16} /> Sortear de novo
+            </button>
+          )}
+          <p className="text-xs text-muted">
+            Confirmar substitui os times desta pelada (a escolha dos capitães, se houver). Só antes do primeiro jogo. Kit e cor: o admin ajusta depois em Times da
+            pelada.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (manual) {
+    const count = Array.from({ length: Number(n) }, (_, t) => chosen.filter((p) => manual[p.id] === t).length)
+    const ready = chosen.every((p) => manual[p.id] != null) && count.every((c) => c > 0)
+    return (
+      <div className="pb-6">
+        <div className="flex justify-end px-4 pt-3">
+          <AdminBadge />
+        </div>
+        <p className="px-4 text-sm text-muted">Toque no time de cada jogador. Sem capitães e sem sorteio.</p>
+        <div className="flex flex-wrap gap-2 px-4 pt-3">
+          {count.map((c, t) => (
+            <span key={t} className="flex items-center gap-1.5 rounded-full border border-line-2 px-3 py-1 text-xs">
+              <span className="h-3 w-3 rounded-full" style={{ background: TEAM_COLORS[t].hex }} />
+              {TEAM_COLORS[t].name}: {c}
+            </span>
+          ))}
+        </div>
+        <SectionLabel>Jogadores · {chosen.length}</SectionLabel>
+        {chosen.map((p) => (
+          <div key={p.id} className="flex min-h-14 items-center gap-2 border-b border-row px-4">
+            <span className="min-w-0 flex-1 truncate">{p.name}</span>
+            {count.map((_, t) => (
+              <button
+                key={t}
+                aria-label={`${p.name} no time ${TEAM_COLORS[t].name}`}
+                onClick={() => setManual((m) => ({ ...m, [p.id]: t }))}
+                className={`h-9 w-9 rounded-full border-2 ${manual[p.id] === t ? 'border-action' : 'border-transparent opacity-40'}`}
+                style={{ background: TEAM_COLORS[t].hex }}
+              />
+            ))}
+          </div>
+        ))}
+        <div className="space-y-2 px-4 pt-4">
+          <button
+            className="btn w-full"
+            disabled={!ready}
+            onClick={() => setResult(count.map((_, t) => chosen.filter((p) => manual[p.id] === t)))}
+          >
+            Ver times
           </button>
-          <p className="text-xs text-muted">Confirmar substitui os times desta pelada (a escolha dos capitães, se houver).</p>
+          {!ready && <p className="text-xs text-muted">Coloque todos num time, e cada time com pelo menos 1.</p>}
+          <button className="h-11 w-full text-sm text-muted" onClick={() => setManual(null)}>
+            Voltar
+          </button>
         </div>
       </div>
     )
@@ -182,9 +249,12 @@ export default function Sorteio() {
         <input type="checkbox" className="h-5 w-5 accent-action" checked={balance} onChange={(e) => setBalance(e.target.checked)} />
         Equilibrar pelo overall
       </label>
-      <div className="px-4 pt-2">
+      <div className="space-y-2 px-4 pt-2">
         <button className="btn w-full" disabled={chosen.length < Number(n) * 2} onClick={() => setResult(draw(chosen, Number(n), balance))}>
-          Sortear
+          <Shuffle size={16} className="mr-1.5 inline" /> Sortear
+        </button>
+        <button className="btn-outline flex w-full items-center justify-center gap-2" disabled={chosen.length < Number(n)} onClick={() => setManual({})}>
+          <Hand size={16} /> Montar na mão
         </button>
       </div>
     </div>
