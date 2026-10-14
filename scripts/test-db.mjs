@@ -135,9 +135,28 @@ try {
   await expect('troféus do mês fechado', async () => {
     await as(null)
     await q(`update peladas set date = '2026-09-13' where id = $1`, [pel])
+    // os jogadores de teste viraram mensalistas hoje: o período passa a começar em setembro
+    await q(`update mensalista_periods set started_on = '2026-09-01'`)
     await as(id('adm'))
     const r = await q(`select a.award, a.position, p.name from awards a join profiles p on p.id = a.profile_id where a.month = '2026-09-01' order by a.award, a.position, p.name`)
     return '\n' + r.rows.map((x) => `   ${x.award} ${x.position}o: ${x.name}`).join('\n')
+  })
+  await expect('quem vira diarista ou é desativado continua no pódio e nos troféus dos meses em que foi mensalista', async () => {
+    await as(id('adm'))
+    const before = (await one(`select count(*)::int n from awards where month = '2026-09-01' and profile_id in ($1, $2)`, [id('j2'), id('j3')])).n
+    await q(`select set_player_type($1, 'diarista')`, [id('j2')])
+    await q(`select set_player_active($1, false)`, [id('j3')])
+    const r = await one(`select (select count(*)::int from podium where month = '2026-09-01' and profile_id in ($1, $2)) podio, (select count(*)::int from awards where month = '2026-09-01' and profile_id in ($1, $2)) trofeus`, [id('j2'), id('j3')])
+    // um mês depois de deixar de ser mensalista, não entra mais
+    await as(null)
+    await q(`update mensalista_periods set ended_on = '2026-09-30' where profile_id = $1`, [id('j2')])
+    const later = (await one(`select public.was_mensalista($1, '2026-10-01') m`, [id('j2')])).m
+    await q(`update mensalista_periods set ended_on = current_date where profile_id = $1`, [id('j2')])
+    await as(id('adm'))
+    await q(`select set_player_active($1, true)`, [id('j3')])
+    await q(`select set_player_type($1, 'mensalista')`, [id('j2')])
+    if (r.podio !== 2 || r.trofeus !== before || !before || later) throw new Error(JSON.stringify({ ...r, before, later }))
+    return `pódio: ${r.podio}, troféus: ${r.trofeus} de ${before}`
   })
   await expect('mensalidade do mês é criada uma vez só', async () => {
     await as(null)

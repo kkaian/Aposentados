@@ -58,7 +58,7 @@ Tema escuro, seguindo o escudo. Fundo `#0B1226`, superfície `#101A38`, borda `#
 - **Diarista:** todo mundo começa assim. Tem perfil e histórico, mas fica fora do pódio, dos troféus e das notas. Só marca presença numa pelada se o admin o chamar, e o admin **só pode chamar quando falta mensalista** para os 20 lugares (4 times de 5): há menos de 20 mensalistas ou algum disse "Não vou". Se o mensalista voltar a ir, o diarista sai da lista de disponíveis da escolha.
 - **Avulso:** sem conta, só o nome, criado na hora. Gols e assistências ficam só no histórico do dia.
 
-**Admin e tipo são independentes:** o pódio olha só o tipo. Quem vira admin começa como mensalista (se houver vaga na cota), mas pode ser retirado da mensalidade e continuar admin; nesse caso conta como diarista.
+**Admin e tipo são independentes:** o pódio olha só o tipo (o de cada mês: o app guarda os períodos de mensalista). Quem vira admin começa como mensalista (se houver vaga na cota), mas pode ser retirado da mensalidade e continuar admin; nesse caso conta como diarista.
 
 **Cota:** número máximo de mensalistas, definido pelo admin. Promover diarista só havendo vaga. Retirar um mensalista o torna diarista; perfil e histórico continuam.
 
@@ -114,11 +114,11 @@ Vou/Não vou, atualizando ao vivo. Marcam presença os mensalistas e os diarista
 
 ### Pódio (aba Início)
 
-Abas Total, Vitórias, Gols e Assistências. Total = gols + assistências. Desempate por vitórias. Empate em tudo: mesma posição e a seguinte é pulada (1, 2, 2, 4). Ranking completo com top 3 em destaque. Só mensalistas. Um mês por vez, com o ano no título quando não é o ano atual.
+Abas Total, Vitórias, Gols e Assistências. Total = gols + assistências. Desempate por vitórias. Empate em tudo: mesma posição e a seguinte é pulada (1, 2, 2, 4). Ranking completo com top 3 em destaque. Só mensalistas: cada mês mostra quem era mensalista naquele mês (quem depois virou diarista ou foi desativado continua nos meses em que foi, porque o pódio é a prova dos títulos). Um mês por vez, com o ano no título quando não é o ano atual.
 
 ### Troféus do mês
 
-Aparecem no perfil a partir do dia 1º do mês seguinte, calculados na hora (correções de eventos ajustam os troféus). Só mensalistas. Sem troféu: "Sem troféus ainda".
+Aparecem no perfil a partir do dia 1º do mês seguinte, calculados na hora (correções de eventos ajustam os troféus). Só quem era mensalista naquele mês (o app guarda os períodos de mensalista, desde 01/10/2026). Sem troféu: "Sem troféus ainda".
 - **Melhor do mês** (🏆 🥈 🥉): gols + assistências, desempate por vitórias. 1º, 2º e 3º.
 - **Artilheiro** (⚽), **Garçom** (🎯) e **Mais vitórias** (💪): só o 1º; empate premia todos.
 - **Seleção do mês** (⭐): o time com mais vitórias numa pelada do mês; desempate por gols; empate de novo, os dois levam. Ganham os mensalistas do time naquela pelada (quem saiu em troca integral ou foi só emprestado não leva).
@@ -159,7 +159,7 @@ Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. i
 - **Cadastro:** código de convite (gerar um novo invalida o anterior) + aprovação do admin. Entra como diarista.
 - **Esqueci minha senha:** o jogador pede pelo app e o pedido aparece para o admin em Cadastros.
 - **Recuperar acesso:** em Jogadores e permissões, a chave ao lado do nome mostra o usuário e gera uma senha temporária para passar por fora do app. No próximo acesso o jogador é obrigado a criar a dele. O jogador também troca a senha pelo perfil.
-- **Editar jogador (lápis em Jogadores e permissões):** corrigir o nome e **desativar** quem saiu do grupo (some das listas e não entra mais; jogos e histórico ficam; mensalista libera a cota e sai do pódio). Admin só é desativado pelo dono; o dono nunca. "Reativar" na lista de desativados (mensalista só com vaga na cota).
+- **Editar jogador (lápis em Jogadores e permissões):** corrigir o nome e **desativar** quem saiu do grupo (some das listas e não entra mais; jogos, histórico, pódio e troféus dos meses em que foi mensalista ficam; mensalista libera a cota). Admin só é desativado pelo dono; o dono nunca. "Reativar" na lista de desativados (mensalista só com vaga na cota).
 - **Cadastro recusado por engano:** em Cadastros, "Ver recusados" → Aprovar.
 
 ## 6. Telas
@@ -251,6 +251,7 @@ Ideias para depois:
 - A escolha dos times termina antes do horário da pelada (o que faltar é sorteado).
 - Pelada de 04/10/2026 (feita no papel) lançada direto no banco.
 - 14/10/2026 (depois da pelada de 11/10): tudo que não tinha volta ganhou opção. Excluir pelada e jogo só o dono, digitando "aposentados fc"; excluir pelada estorna o dinheiro de diarista dela. Montar times na mão: dono e admins. "Faltou" tira dos jogos quem não foi (aplicado na pelada de 11/10). Também: editar times, desfazer última escolha, reabrir pelada, desativar/renomear jogador, aprovar recusado, desfazer "Já paguei", editar/excluir cobrança.
+- Pódio e troféus de cada mês ficam com quem era mensalista naquele mês: virar diarista ou ser desativado não apaga os títulos (14/10/2026).
 
 ## 12. Onde os wireframes estão desatualizados
 

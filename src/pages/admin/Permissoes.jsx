@@ -232,7 +232,7 @@ Senha temporária: ${access.password}`).then(() => setMsg({ ok: 'Copiado.' }), (
                 Desativar (saiu do grupo)
               </button>
               <p className="mt-1 text-xs text-muted">
-                Some das listas e não entra mais no app. Os jogos e o histórico ficam, e dá para reativar depois. Mensalista desativado libera a vaga da cota e sai do pódio.
+                Some das listas e não entra mais no app. Os jogos e o histórico ficam, e dá para reativar depois. Mensalista desativado libera a vaga da cota; nos meses em que foi mensalista, continua no pódio e nos troféus.
               </p>
             </>
           )}
