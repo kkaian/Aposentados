@@ -1,7 +1,9 @@
-import { Camera, ChevronLeft, ChevronRight, Trophy } from 'lucide-react'
+import { Camera, ChevronLeft, ChevronRight, Pencil, Trophy } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import { PositionTags, PositionsSheet } from '../components/Positions'
+import { GK_RATING_FIELDS } from '../lib/positions'
 import { PushSetting } from '../components/PushControls'
 import { Notice, Segmented, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
@@ -34,7 +36,21 @@ function Stars({ value }) {
   )
 }
 
-function StatsBlock({ profileId }) {
+const PLAYER_STATS = [
+  ['goals', 'Gols'],
+  ['assists', 'Assist.'],
+  ['wins', 'Vitórias'],
+]
+
+// Goleiro: no lugar dos gols, gols sofridos e defesas difíceis. Quem também joga na linha vê "Assist.*"
+const keeperStats = (both) => [
+  ['wins', 'Vitórias'],
+  ['conceded', 'Gols sofridos'],
+  ['assists', both ? 'Assist.*' : 'Assist.'],
+  ['saves', 'Defesas difíceis'],
+]
+
+function StatsBlock({ profileId, view = 'player_month_stats', fields = PLAYER_STATS }) {
   const [period, setPeriod] = useState('mes')
   const [month, setMonth] = useState(monthStart(todayISO()))
   const [rows, setRows] = useState()
@@ -42,14 +58,14 @@ function StatsBlock({ profileId }) {
   useEffect(() => {
     let alive = true
     supabase
-      .from('player_month_stats')
+      .from(view)
       .select('*')
       .eq('profile_id', profileId)
       .then(({ data }) => alive && setRows(data ?? []))
     return () => {
       alive = false
     }
-  }, [profileId])
+  }, [profileId, view])
 
   const year = month.slice(0, 4)
   const filtered = (rows ?? []).filter((r) => (period === 'mes' ? r.month === month : period === 'ano' ? r.month.startsWith(year) : true))
@@ -89,14 +105,10 @@ function StatsBlock({ profileId }) {
         </button>
       </div>
       <div className="flex gap-2 px-4">
-        {[
-          ['goals', 'Gols'],
-          ['assists', 'Assist.'],
-          ['wins', 'Vitórias'],
-        ].map(([k, l]) => (
-          <div key={k} className="flex-1 rounded-lg border border-line py-3 text-center">
+        {fields.map(([k, l]) => (
+          <div key={k} className="min-w-0 flex-1 rounded-lg border border-line py-3 text-center">
             <b className="block text-2xl">{rows === undefined ? '–' : sum(k)}</b>
-            <span className="text-xs text-muted">{l}</span>
+            <span className="text-xs leading-tight text-muted">{l}</span>
           </div>
         ))}
       </div>
@@ -104,27 +116,27 @@ function StatsBlock({ profileId }) {
   )
 }
 
-function RatingsBlock({ profileId }) {
+function RatingsBlock({ profileId, view = 'rating_summary', rows = RATING_ROWS, title = 'Notas' }) {
   const [summary, setSummary] = useState()
   useEffect(() => {
     supabase
-      .from('rating_summary')
+      .from(view)
       .select('*')
       .eq('profile_id', profileId)
       .maybeSingle()
       .then(({ data }) => setSummary(data ?? { votes: 0 }))
-  }, [profileId])
+  }, [profileId, view])
 
   const enough = summary?.overall != null
   return (
     <div className="card mx-4 mt-4">
       <div className="mb-1 flex items-baseline justify-between">
-        <b>Notas</b>
+        <b>{title}</b>
         <span className="text-xs text-muted">média das avaliações</span>
       </div>
-      {RATING_ROWS.map(([k, l]) => (
+      {rows.map(([k, l]) => (
         <div key={k} className="flex h-10 items-center gap-3 text-sm">
-          <span className="w-24">{l}</span>
+          <span className="w-24 leading-tight">{l}</span>
           <Stars value={enough && summary[k] != null ? Number(summary[k]) : 0} />
           <span className="ml-auto text-muted">{enough && summary[k] != null ? Number(summary[k]).toFixed(1).replace('.', ',') : '–'}</span>
         </div>
@@ -194,6 +206,9 @@ export default function Perfil() {
   const [player, setPlayer] = useState(isMe ? me : undefined)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [editPositions, setEditPositions] = useState(false)
+  // quem é jogador e goleiro alterna os números e as notas pela seta
+  const [asKeeper, setAsKeeper] = useState(false)
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -226,10 +241,20 @@ export default function Perfil() {
     setUploading(false)
   }
 
+  async function savePositions(positions) {
+    const { error } = await supabase.from('profiles').update({ positions }).eq('id', me.id)
+    if (error) throw new Error(friendlyError(error))
+    await refreshProfile()
+    setEditPositions(false)
+  }
+
   if (player === undefined) return <Spinner />
   if (!player) return <div className="p-6 text-center text-muted">Jogador não encontrado.</div>
 
   const role = ROLE_LABEL[player.role]
+  const both = player.goalkeeper === 'tambem'
+  const keeperView = player.goalkeeper === 'so_goleiro' || (both && asKeeper)
+  const canRate = me.type === 'mensalista' && (player.type === 'mensalista' || player.goalkeeper)
 
   return (
     <div className="pb-6">
@@ -250,9 +275,18 @@ export default function Perfil() {
         </div>
         <b className="mt-3 text-xl">{player.name}</b>
         <div className="mt-1 flex gap-2 text-xs">
-          <span className="rounded-md bg-surface-2 px-2 py-0.5 text-silver">{TYPE_LABEL[player.type]}</span>
+          {player.goalkeeper !== 'so_goleiro' && <span className="rounded-md bg-surface-2 px-2 py-0.5 text-silver">{TYPE_LABEL[player.type]}</span>}
           {role && <span className="rounded-md border border-line-2 px-2 py-0.5 text-muted">{role}</span>}
           {player.username && <span className="py-0.5 text-muted">@{player.username}</span>}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+          <PositionTags positions={player.positions} goalkeeper={player.goalkeeper} full />
+          {isMe && (
+            <button className="flex h-8 items-center gap-1 px-1 text-xs font-semibold text-action" onClick={() => setEditPositions(true)}>
+              <Pencil size={13} />
+              {player.positions?.length ? 'Editar funções' : 'Adicionar minhas funções'}
+            </button>
+          )}
         </div>
         {uploading && <div className="mt-2 text-xs text-muted">Enviando foto…</div>}
         {error && (
@@ -262,8 +296,29 @@ export default function Perfil() {
         )}
       </div>
 
-      <StatsBlock profileId={player.id} />
-      <RatingsBlock profileId={player.id} />
+      {both && (
+        <div className="mx-4 mb-2 flex items-center justify-between rounded-lg border border-line">
+          <button className="flex h-11 w-11 items-center justify-center" aria-label="Ver como jogador" onClick={() => setAsKeeper((v) => !v)}>
+            <ChevronLeft size={20} />
+          </button>
+          <span className="text-sm font-semibold">{asKeeper ? 'Como goleiro' : 'Como jogador'}</span>
+          <button className="flex h-11 w-11 items-center justify-center" aria-label="Ver como goleiro" onClick={() => setAsKeeper((v) => !v)}>
+            <ChevronRight size={20} />
+          </button>
+        </div>
+      )}
+      {keeperView ? (
+        <>
+          <StatsBlock profileId={player.id} view="goalkeeper_month_stats" fields={keeperStats(both)} />
+          {both && <p className="px-4 pt-1 text-[11px] text-muted">* assistências dadas enquanto estava no gol</p>}
+          <RatingsBlock profileId={player.id} view="goalkeeper_rating_summary" rows={GK_RATING_FIELDS} title="Notas de goleiro" />
+        </>
+      ) : (
+        <>
+          <StatsBlock profileId={player.id} />
+          <RatingsBlock profileId={player.id} />
+        </>
+      )}
 
       <TrophiesBlock profileId={player.id} />
 
@@ -281,14 +336,14 @@ export default function Perfil() {
             </Link>
           </>
         ) : (
-          player.type === 'mensalista' &&
-          me.type === 'mensalista' && (
+          canRate && (
             <Link to={`/notas/${player.id}`} className="btn-outline flex w-full items-center justify-center">
-              Avaliar este jogador
+              {player.type === 'mensalista' ? 'Avaliar este jogador' : 'Avaliar este goleiro'}
             </Link>
           )
         )}
       </div>
+      {editPositions && <PositionsSheet value={me.positions} onSave={savePositions} onClose={() => setEditPositions(false)} />}
     </div>
   )
 }

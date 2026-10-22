@@ -2,6 +2,7 @@ import { ChevronRight, Crown, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import { PositionTags } from '../components/Positions'
 import { Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { photoUrl } from '../lib/storage'
@@ -11,6 +12,7 @@ const FILTERS = [
   ['todos', 'Todos'],
   ['mensalista', 'Mensalistas'],
   ['diarista', 'Diaristas'],
+  ['goleiro', 'Goleiros'],
   ['admin', 'Admins'],
 ]
 
@@ -36,10 +38,14 @@ export default function Jogadores() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from('profiles').select('id, name, username, role, type, photo_path').eq('status', 'ativo'),
+      supabase.from('profiles').select('id, name, username, role, type, photo_path, positions, goalkeeper').eq('status', 'ativo'),
       supabase.from('rating_summary').select('profile_id, overall'),
-    ]).then(([{ data: people }, { data: ratings }]) => {
+      supabase.from('goalkeeper_rating_summary').select('profile_id, overall'),
+    ]).then(([{ data: people }, { data: ratings }, { data: gkRatings }]) => {
+      // só goleiro mostra a nota de goleiro
+      const gk = Object.fromEntries((gkRatings ?? []).map((r) => [r.profile_id, r.overall]))
       const overall = Object.fromEntries((ratings ?? []).map((r) => [r.profile_id, r.overall]))
+      for (const p of people ?? []) if (p.goalkeeper === 'so_goleiro') overall[p.id] = gk[p.id]
       setPlayers(
         (people ?? [])
           .map((p) => ({ ...p, overall: overall[p.id] }))
@@ -51,10 +57,11 @@ export default function Jogadores() {
   if (!players) return <Spinner />
 
   const q = query.trim().toLowerCase()
-  const count = (key) => players.filter((p) => (key === 'todos' ? true : key === 'admin' ? p.role !== 'jogador' : p.type === key)).length
+  const inFilter = (p, key) => (key === 'todos' ? true : key === 'admin' ? p.role !== 'jogador' : key === 'goleiro' ? Boolean(p.goalkeeper) : p.type === key && p.goalkeeper !== 'so_goleiro')
+  const count = (key) => players.filter((p) => inFilter(p, key)).length
   const visible = players.filter(
     (p) =>
-      (filter === 'todos' || (filter === 'admin' ? p.role !== 'jogador' : p.type === filter)) &&
+      inFilter(p, filter) &&
       (!q || p.name.toLowerCase().includes(q) || p.username?.includes(q)),
   )
 
@@ -95,10 +102,13 @@ export default function Jogadores() {
                   </span>
                 )}
                 {p.role === 'admin' && <span className="rounded-md border border-action px-1.5 py-px font-semibold text-action">Admin</span>}
-                <span className={`rounded-md px-1.5 py-px ${p.type === 'mensalista' ? 'bg-surface-2 text-silver' : 'border border-line-2 text-muted'}`}>
-                  {p.type === 'mensalista' ? 'Mensalista' : 'Diarista'}
-                </span>
+                {p.goalkeeper !== 'so_goleiro' && (
+                  <span className={`rounded-md px-1.5 py-px ${p.type === 'mensalista' ? 'bg-surface-2 text-silver' : 'border border-line-2 text-muted'}`}>
+                    {p.type === 'mensalista' ? 'Mensalista' : 'Diarista'}
+                  </span>
+                )}
                 {p.overall != null && <OverallStars value={p.overall} />}
+                <PositionTags positions={p.positions} goalkeeper={p.goalkeeper} />
               </div>
             </div>
             <ChevronRight size={18} className="text-muted" />

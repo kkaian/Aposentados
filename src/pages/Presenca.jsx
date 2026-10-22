@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
 import AdminPresenceSheet from '../components/AdminPresenceSheet'
 import PresenceAnswer from '../components/PresenceAnswer'
-import { Segmented, Spinner } from '../components/ui'
+import { SectionLabel, Segmented, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
 import { dayLabel, timeLabel } from '../lib/dates'
 import { fetchCurrentPelada, fetchEligible } from '../lib/peladas'
@@ -19,20 +19,26 @@ export default function Presenca() {
   const [tab, setTab] = useState('vao')
   const [inTeam, setInTeam] = useState(new Set())
   const [marking, setMarking] = useState(null)
+  // só goleiros: confirmam presença, mas ficam fora das vagas
+  const [keepers, setKeepers] = useState([])
   const isAdmin = isAdminRole(profile)
 
   const load = useCallback(async () => {
     const p = id ? (await supabase.from('peladas').select('*').eq('id', id).maybeSingle()).data : await fetchCurrentPelada()
     setPelada(p ?? null)
     if (!p) return
-    const [el, { data }, { data: members }] = await Promise.all([
+    const [el, { data }, { data: members }, { data: gk }, { data: gkPresence }] = await Promise.all([
       fetchEligible(p.id),
       supabase.from('presence_list').select('*').eq('pelada_id', p.id).order('answered_at'),
       supabase.from('team_members').select('profile_id').eq('pelada_id', p.id).eq('is_out', false),
+      supabase.from('profiles').select('id, name, photo_path, type, goalkeeper').eq('status', 'ativo').eq('goalkeeper', 'so_goleiro').order('name'),
+      supabase.from('presence').select('profile_id, answer').eq('pelada_id', p.id),
     ])
     setEligible(el)
     setInTeam(new Set((members ?? []).map((m) => m.profile_id).filter(Boolean)))
     setList(data ?? [])
+    const answer = Object.fromEntries((gkPresence ?? []).map((r) => [r.profile_id, r.answer]))
+    setKeepers((gk ?? []).map((k) => ({ ...k, answer: answer[k.id] ?? null })))
   }, [id])
 
   useEffect(() => {
@@ -58,8 +64,9 @@ export default function Presenca() {
   const notGoing = list.filter((r) => r.answer === 'nao_vou')
   const answered = new Set(list.map((r) => r.profile_id))
   const noAnswer = eligible.filter((p) => !answered.has(p.id))
-  const mine = list.find((r) => r.profile_id === profile.id)
-  const canAnswer = byId[profile.id] && (pelada.status === 'agendada' || pelada.status === 'em_andamento')
+  const myKeeper = keepers.find((k) => k.id === profile.id)
+  const mine = list.find((r) => r.profile_id === profile.id) ?? (myKeeper?.answer ? { answer: myKeeper.answer } : undefined)
+  const canAnswer = (byId[profile.id] || myKeeper) && (pelada.status === 'agendada' || pelada.status === 'em_andamento')
 
   const rows = { vao: going, nao: notGoing, sem: noAnswer.map((p) => ({ profile_id: p.id })), espera: waiting }[tab]
   const badge = { vao: 'Vai', nao: 'Não vai', sem: 'Dúvida', espera: 'Espera' }[tab]
@@ -116,6 +123,27 @@ export default function Presenca() {
       })}
       {isAdmin && pelada.status !== 'encerrada' && (
         <p className="px-4 pt-3 text-xs text-muted">Admin: toque num jogador para marcar se ele vai ou não (ex.: faltou sem avisar).</p>
+      )}
+      {keepers.length > 0 && (
+        <>
+          <SectionLabel>Goleiros · {keepers.filter((k) => k.answer === 'vou').length} confirmados</SectionLabel>
+          {keepers.map((k) => (
+            <button
+              key={k.id}
+              type="button"
+              disabled={!isAdmin || pelada.status === 'encerrada'}
+              onClick={() => setMarking({ person: k, answer: k.answer })}
+              className="flex min-h-14 w-full items-center gap-3 border-b border-row px-4 text-left active:bg-surface-2"
+            >
+              <Avatar name={k.name} src={photoUrl(k.photo_path)} />
+              <div className="flex-1">{k.name}</div>
+              <span className={`rounded-full border px-2 py-0.5 text-xs ${k.answer === 'vou' ? 'border-gold text-gold' : 'border-line-2 text-muted'}`}>
+                {k.answer === 'vou' ? 'Vai' : k.answer === 'nao_vou' ? 'Não vai' : 'Dúvida'}
+              </span>
+            </button>
+          ))}
+          <p className="px-4 pt-2 text-xs text-muted">Goleiros não ocupam vaga: em cada jogo, admin ou ajudante define quem agarra por qual time.</p>
+        </>
       )}
       {marking && (
         <AdminPresenceSheet

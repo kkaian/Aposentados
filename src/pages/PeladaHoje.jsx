@@ -1,8 +1,10 @@
-import { ChevronRight, Flag, Pencil, Play, Plus, RotateCcw, Trash2, UserPlus } from 'lucide-react'
+import { ChevronRight, Flag, Map as MapIcon, Pencil, Play, Plus, RotateCcw, Trash2, UserPlus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import DangerSheet from '../components/DangerSheet'
 import FillSlotSheet from '../components/FillSlotSheet'
+import KeepersOfDay from '../components/KeepersOfDay'
+import RodizioPanel from '../components/RodizioPanel'
 import Sheet from '../components/Sheet'
 import TeamCard from '../components/TeamCard'
 import { AddMemberSheet, MemberSheet, RestoreSheet } from '../components/TeamEditSheets'
@@ -146,6 +148,8 @@ export default function PeladaHoje() {
   const teamById = Object.fromEntries(teams.map((t) => [t.id, t]))
   // admin corrige os times a qualquer hora (até depois de encerrada), menos durante a escolha dos capitães
   const canEditTeams = isAdmin && !drafting
+  const rodizio = pelada.format === 'rodizio'
+  const myTeam = rodizio ? null : teams.find((t) => t.captain_id === profile.id || t.active.some((m) => m.profile_id === profile.id))
   const done = () => {
     setEdit(null)
     setFill(null)
@@ -188,6 +192,21 @@ export default function PeladaHoje() {
         </div>
       )}
 
+      {myTeam && !closed && pelada.status !== 'cancelada' && (
+        <Link to="/estrategia" className="card mx-4 mt-3 flex items-center gap-3 active:bg-surface-2">
+          <MapIcon size={22} className="flex-none text-[#7FD3A4]" />
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">Estratégia do meu time</div>
+            <div className="text-xs text-muted">{myTeam.captain_id === profile.id ? 'Monte a formação e as instruções' : 'Veja o plano de jogo do capitão'}</div>
+          </div>
+          <ChevronRight size={18} className="text-muted" />
+        </Link>
+      )}
+
+      {rodizio && <RodizioPanel pelada={pelada} games={games} events={events} canManage={canManage} />}
+
+      {!rodizio && (
+      <>
       <div className="flex items-center justify-between pr-4">
         <SectionLabel>Times da pelada</SectionLabel>
         <Link to="/times" className="text-xs font-semibold text-action">
@@ -215,6 +234,9 @@ export default function PeladaHoje() {
           ))}
         </div>
       )}
+      </>
+      )}
+      <KeepersOfDay peladaId={pelada.id} />
 
       <SectionLabel>Jogos de hoje</SectionLabel>
       {games.length === 0 && <div className="px-4 text-sm text-muted">Nenhum jogo ainda.</div>}
@@ -245,12 +267,12 @@ export default function PeladaHoje() {
             <Play size={18} /> Abrir jogo ao vivo
           </Link>
         )}
-        {canManage && teams.length >= 2 && (
+        {canManage && !rodizio && teams.length >= 2 && (
           <button className="btn-outline flex w-full items-center justify-center gap-2" onClick={() => setSheet(true)}>
             <Plus size={18} /> Definir próximo jogo
           </button>
         )}
-        {isAdmin && teams.length > 0 && !closed && !id && (
+        {isAdmin && !rodizio && teams.length > 0 && !closed && !id && (
           <Link to="/admin/diarista" className="btn-ghost flex items-center justify-center gap-2">
             <UserPlus size={18} /> Diarista no lugar de alguém
           </Link>
@@ -278,7 +300,7 @@ export default function PeladaHoje() {
         <Notice>{msg}</Notice>
       </div>
 
-      {isAdmin && teams.length > 0 && (
+      {isAdmin && !rodizio && teams.length > 0 && (
         <p className="px-4 pt-2 text-xs text-muted">
           Admin: toque num jogador para marcar presença, trocar, mudar de time, tirar do time ou marcar que faltou (sai dos jogos e não conta vitória).
         </p>

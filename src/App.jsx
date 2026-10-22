@@ -21,6 +21,7 @@ import EncerrarPelada from './pages/EncerrarPelada'
 import Historico from './pages/Historico'
 import Inicio from './pages/Inicio'
 import Jogadores from './pages/Jogadores'
+import Estrategia from './pages/Estrategia'
 import Jogo from './pages/Jogo'
 import Login from './pages/Login'
 import MeuTime from './pages/MeuTime'
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="/jogo/:id" element={<Jogo />} />
         <Route path="/historico" element={<Historico />} />
         <Route path="/times" element={<Times />} />
+        <Route path="/estrategia" element={<Estrategia />} />
         <Route path="/notas" element={<AvaliarLista />} />
         <Route path="/notas/:id" element={<Votar />} />
         <Route path="/pagamentos" element={<Pagamentos />} />
@@ -82,8 +84,8 @@ export default function App() {
           <Route path="permissoes" element={<Permissoes />} />
           <Route path="mensalistas" element={<Mensalistas />} />
           <Route path="peladas" element={<Peladas />} />
-          <Route path="peladas/nova" element={<PeladaForm />} />
-          <Route path="peladas/:id" element={<PeladaForm />} />
+          <Route path="peladas/nova" element={<PeladaForm key="nova" />} />
+          <Route path="peladas/:id" element={<PeladaForm key="editar" />} />
           <Route path="peladas/:id/capitaes" element={<DefinirCapitaes />} />
           <Route path="sorteio" element={<Sorteio />} />
           <Route path="kits" element={<Kits />} />

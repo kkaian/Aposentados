@@ -37,9 +37,13 @@ function NextPelada() {
       .maybeSingle()
     setPelada(data)
     if (!data) return
-    const { data: list } = await supabase.from('presence_list').select('profile_id, answer, waitlisted').eq('pelada_id', data.id)
+    const [{ data: list }, { data: own }] = await Promise.all([
+      supabase.from('presence_list').select('profile_id, answer, waitlisted').eq('pelada_id', data.id),
+      // a própria resposta vem da presença (o goleiro fica fora da lista de vagas)
+      supabase.from('presence').select('answer').eq('pelada_id', data.id).eq('profile_id', profile.id).maybeSingle(),
+    ])
     setGoing((list ?? []).filter((p) => p.answer === 'vou' && !p.waitlisted).length)
-    setMine(list?.find((p) => p.profile_id === profile.id) ?? null)
+    setMine(own ?? null)
   }, [profile.id])
 
   useEffect(() => {

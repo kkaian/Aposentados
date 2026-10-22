@@ -57,6 +57,7 @@ const TITLES = {
   ...Object.fromEntries([...MENU, ...ADMIN_MENU].map((m) => [m.to, m.label])),
   '/presenca': 'Presença',
   '/times/meu': 'Meu time',
+  '/estrategia': 'Estratégia',
   '/trocar-senha': 'Trocar senha',
   '/admin/cadastros': 'Cadastros',
   '/admin/permissoes': 'Permissões',

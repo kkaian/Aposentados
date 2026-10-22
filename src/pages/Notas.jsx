@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import { PositionTags } from '../components/Positions'
 import { Notice, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { friendlyError } from '../lib/errors'
+import { GK_RATING_FIELDS } from '../lib/positions'
 import { photoUrl } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 
@@ -16,8 +18,17 @@ const RATING_FIELDS = [
   ['overall', 'Overall'],
 ]
 
+// Notas de jogador (só mensalistas recebem) e de goleiro (quem o admin marcou como goleiro)
+const KINDS = {
+  linha: { table: 'ratings', fields: RATING_FIELDS, title: 'Como jogador' },
+  gol: { table: 'goalkeeper_ratings', fields: GK_RATING_FIELDS, title: 'Como goleiro' },
+}
+const kindsOf = (p) => [...(p.type === 'mensalista' ? ['linha'] : []), ...(p.goalkeeper ? ['gol'] : [])]
+
 // Cada nota muda 1 vez por pelada: trava se já mudou depois da última pelada encerrada
 const isLocked = (rating, lastClosed) => Boolean(rating && lastClosed && Date.parse(rating.updated_at) >= Date.parse(lastClosed))
+// nota antiga de jogador sem defesa e passe: completar não conta como mudança
+const isIncomplete = (kind, rating) => kind === 'linha' && rating && (rating.defense == null || rating.passing == null)
 const lastClosedAt = async () => {
   const { data } = await supabase.rpc('last_pelada_closed_at')
   return data === '-infinity' ? '1970-01-01T00:00:00Z' : data
@@ -37,31 +48,39 @@ function MiniStars({ value }) {
 }
 
 function NotMensalista() {
-  return <div className="p-6 text-center text-sm text-muted">As notas são dadas e recebidas só por mensalistas.</div>
+  return <div className="p-6 text-center text-sm text-muted">As notas são dadas só por mensalistas.</div>
 }
 
-// Lista dos colegas com a nota que você deu
+// Lista dos colegas e goleiros com a nota que você deu
 export function AvaliarLista() {
   const { profile } = useAuth()
   const [players, setPlayers] = useState()
-  const [mine, setMine] = useState({})
+  const [mine, setMine] = useState({ linha: {}, gol: {} })
   const [lastClosed, setLastClosed] = useState(null)
 
   useEffect(() => {
     Promise.all([
-      supabase.from('profiles').select('id, name, photo_path').eq('status', 'ativo').eq('type', 'mensalista').neq('id', profile.id).order('name'),
+      supabase
+        .from('profiles')
+        .select('id, name, photo_path, positions, type, goalkeeper')
+        .eq('status', 'ativo')
+        .or('type.eq.mensalista,goalkeeper.not.is.null')
+        .neq('id', profile.id)
+        .order('name'),
       supabase.from('ratings').select('*').eq('rater_id', profile.id),
+      supabase.from('goalkeeper_ratings').select('*').eq('rater_id', profile.id),
       lastClosedAt(),
-    ]).then(([p, r, closed]) => {
+    ]).then(([p, r, g, closed]) => {
       setPlayers(p.data ?? [])
-      setMine(Object.fromEntries((r.data ?? []).map((x) => [x.rated_id, x])))
+      const byRated = (rows) => Object.fromEntries((rows ?? []).map((x) => [x.rated_id, x]))
+      setMine({ linha: byRated(r.data), gol: byRated(g.data) })
       setLastClosed(closed)
     })
   }, [profile.id])
 
   if (profile.type !== 'mensalista') return <NotMensalista />
   if (!players) return <Spinner />
-  const rated = players.filter((p) => mine[p.id]).length
+  const rated = players.filter((p) => kindsOf(p).every((k) => mine[k][p.id])).length
 
   return (
     <div className="pb-6">
@@ -74,17 +93,24 @@ export function AvaliarLista() {
       </div>
       <div className="pt-2">
         {players.map((p) => {
-          const r = mine[p.id]
-          const incomplete = r && (r.defense == null || r.passing == null)
-          const locked = !incomplete && isLocked(r, lastClosed)
+          const kinds = kindsOf(p)
+          const given = kinds.map((k) => mine[k][p.id])
+          const missing = given.some((r) => !r) || kinds.some((k) => isIncomplete(k, mine[k][p.id]))
+          const locked = !missing && given.every((r) => isLocked(r, lastClosed))
+          const stars = (mine.linha[p.id] ?? mine.gol[p.id])?.overall
           return (
             <Link key={p.id} to={`/notas/${p.id}`} className="flex min-h-16 items-center gap-3 border-b border-row px-4 active:bg-surface-2">
               <Avatar name={p.name} src={photoUrl(p.photo_path)} />
               <div className="min-w-0 flex-1">
                 <div className="truncate">{p.name}</div>
-                {r ? <MiniStars value={r.overall} /> : <span className="text-xs text-muted">ainda não avaliado</span>}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {stars ? <MiniStars value={stars} /> : <span className="text-xs text-muted">ainda não avaliado</span>}
+                  <PositionTags positions={p.positions} goalkeeper={p.goalkeeper} />
+                </div>
               </div>
-              <span className={`text-sm font-semibold ${locked ? 'text-muted' : 'text-action'}`}>{incomplete ? 'Completar' : locked ? 'Já mudou nesta rodada' : r ? 'Alterar' : 'Avaliar'}</span>
+              <span className={`text-sm font-semibold ${locked ? 'text-muted' : 'text-action'}`}>
+                {missing ? (given.some(Boolean) ? 'Completar' : 'Avaliar') : locked ? 'Já mudou nesta rodada' : 'Alterar'}
+              </span>
             </Link>
           )
         })}
@@ -93,68 +119,41 @@ export function AvaliarLista() {
   )
 }
 
-// Votação de um jogador
-export function Votar() {
-  const { id } = useParams()
-  const navigate = useNavigate()
+// Estrelas de um tipo de nota (jogador ou goleiro), com o próprio botão de salvar
+function RatingForm({ kind, ratedId, current, lastClosed, showTitle, onSaved }) {
   const { profile } = useAuth()
-  const [player, setPlayer] = useState()
-  const [current, setCurrent] = useState(null)
-  const [lastClosed, setLastClosed] = useState(null)
-  const [values, setValues] = useState({ dribble: 0, shot: 0, speed: 0, defense: 0, passing: 0, overall: 0 })
+  const { table, fields, title } = KINDS[kind]
+  const [values, setValues] = useState(() => Object.fromEntries(fields.map(([k]) => [k, current?.[k] ?? 0])))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    Promise.all([
-      supabase.from('profiles').select('id, name, photo_path, type').eq('id', id).maybeSingle(),
-      supabase.from('ratings').select('*').eq('rater_id', profile.id).eq('rated_id', id).maybeSingle(),
-      lastClosedAt(),
-    ]).then(([p, r, closed]) => {
-      setLastClosed(closed)
-      setPlayer(p.data)
-      setCurrent(r.data)
-      if (r.data) setValues(Object.fromEntries(RATING_FIELDS.map(([k]) => [k, r.data[k] ?? 0])))
-    })
-  }, [id, profile.id])
-
-  if (profile.type !== 'mensalista') return <NotMensalista />
-  if (player === undefined) return <Spinner />
-  if (!player || player.type !== 'mensalista' || player.id === profile.id) {
-    return <div className="p-6 text-center text-sm text-muted">Não dá para avaliar este jogador.</div>
-  }
-
-  const incomplete = current && (current.defense == null || current.passing == null)
+  const incomplete = isIncomplete(kind, current)
   const locked = !incomplete && isLocked(current, lastClosed)
-  const complete = RATING_FIELDS.every(([k]) => values[k] > 0)
+  const complete = fields.every(([k]) => values[k] > 0)
 
   async function save() {
     setBusy(true)
     setError('')
-    const row = { rater_id: profile.id, rated_id: id, ...values }
-    const { error } = current ? await supabase.from('ratings').update(values).eq('rater_id', profile.id).eq('rated_id', id) : await supabase.from('ratings').insert(row)
+    const { error } = current
+      ? await supabase.from(table).update(values).eq('rater_id', profile.id).eq('rated_id', ratedId)
+      : await supabase.from(table).insert({ rater_id: profile.id, rated_id: ratedId, ...values })
     setBusy(false)
     if (error) setError(friendlyError(error))
-    else navigate('/notas')
+    else onSaved()
   }
 
   return (
-    <div className="pb-6">
-      <div className="flex flex-col items-center px-4 pt-5">
-        <Avatar name={player.name} src={photoUrl(player.photo_path)} size={72} />
-        <b className="mt-2 text-lg">{player.name}</b>
-        <div className="text-xs text-muted">
-          {incomplete
-            ? 'Faltam as notas de defesa e passe. Completar não conta como a sua mudança.'
-            : current
+    <div className="pt-3">
+      {showTitle && <div className="px-4 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">{title}</div>}
+      <div className="px-4 text-xs text-muted">
+        {incomplete
+          ? 'Faltam as notas de defesa e passe. Completar não conta como a sua mudança.'
+          : current
             ? locked
               ? 'Você já mudou esta nota nesta rodada. Libera de novo quando a próxima pelada for encerrada.'
               : `Sua nota atual (desde ${dayBR(current.updated_at)}). Mude só se quiser.`
             : 'Opcional: avalie só se quiser.'}
-        </div>
       </div>
-
-      {RATING_FIELDS.map(([k, label]) => (
+      {fields.map(([k, label]) => (
         <div key={k} className="border-b border-row px-4 py-3">
           <div className="text-sm">{label}</div>
           <div className="mt-1 flex justify-between">
@@ -172,16 +171,77 @@ export function Votar() {
           </div>
         </div>
       ))}
-
-      <div className="space-y-2 px-4 pt-4">
+      <div className="space-y-2 px-4 pt-3">
         <Notice>{error}</Notice>
         {!locked && (
           <button className="btn w-full" disabled={!complete || busy} onClick={save}>
             {current ? 'Salvar alteração' : 'Salvar avaliação'}
+            {showTitle && (kind === 'gol' ? ' de goleiro' : ' de jogador')}
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+// Votação de um jogador e/ou goleiro: quem é os dois mostra as duas listas, uma abaixo da outra
+export function Votar() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const { profile } = useAuth()
+  const [player, setPlayer] = useState()
+  const [current, setCurrent] = useState({})
+  const [lastClosed, setLastClosed] = useState(null)
+  const [saved, setSaved] = useState('')
+
+  const load = useCallback(
+    () =>
+      Promise.all([
+        supabase.from('profiles').select('id, name, photo_path, type, goalkeeper').eq('id', id).maybeSingle(),
+        supabase.from('ratings').select('*').eq('rater_id', profile.id).eq('rated_id', id).maybeSingle(),
+        supabase.from('goalkeeper_ratings').select('*').eq('rater_id', profile.id).eq('rated_id', id).maybeSingle(),
+        lastClosedAt(),
+      ]).then(([p, r, g, closed]) => {
+        setLastClosed(closed)
+        setPlayer(p.data)
+        setCurrent({ linha: r.data, gol: g.data })
+      }),
+    [id, profile.id],
+  )
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  if (profile.type !== 'mensalista') return <NotMensalista />
+  if (player === undefined) return <Spinner />
+  const kinds = player ? kindsOf(player) : []
+  if (!player || !kinds.length || player.id === profile.id) {
+    return <div className="p-6 text-center text-sm text-muted">Não dá para avaliar este jogador.</div>
+  }
+
+  // com as duas listas, salvar uma não sai da tela
+  function onSaved(kind) {
+    if (kinds.length === 1) return navigate('/notas')
+    setSaved(kind === 'gol' ? 'Nota de goleiro salva.' : 'Nota de jogador salva.')
+    load()
+  }
+
+  return (
+    <div className="pb-6">
+      <div className="flex flex-col items-center px-4 pt-5">
+        <Avatar name={player.name} src={photoUrl(player.photo_path)} size={72} />
+        <b className="mt-2 text-lg">{player.name}</b>
+      </div>
+
+      {kinds.map((k) => (
+        <RatingForm key={k} kind={k} ratedId={id} current={current[k]} lastClosed={lastClosed} showTitle={kinds.length > 1} onSaved={() => onSaved(k)} />
+      ))}
+
+      <div className="space-y-2 px-4 pt-3">
+        <Notice kind="ok">{saved}</Notice>
         <button className="h-11 w-full text-sm text-muted" onClick={() => navigate('/notas')}>
-          {current ? 'Manter minha nota' : 'Voltar'}
+          {kinds.some((k) => current[k]) ? 'Manter minha nota' : 'Voltar'}
         </button>
         <p className="text-xs text-muted">
           Voto anônimo. Você muda cada nota 1 vez por pelada, só dos jogadores que quiser. A nota anterior continua valendo. Não dá para

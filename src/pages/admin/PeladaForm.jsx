@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import DangerSheet from '../../components/DangerSheet'
 import PlayerPicker from '../../components/PlayerPicker'
 import Sheet from '../../components/Sheet'
-import { AdminBadge, Notice, SectionLabel, Spinner } from '../../components/ui'
+import { AdminBadge, Notice, SectionLabel, Segmented, Spinner } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { dayLabel } from '../../lib/dates'
 import { friendlyError } from '../../lib/errors'
@@ -44,7 +44,16 @@ export default function PeladaForm() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const [pelada, setPelada] = useState(isNew ? null : undefined)
-  const [form, setForm] = useState({ date: nextSundayISO(), start_time: '08:00', location: '', max_slots: 20, presence_open: true })
+  const [form, setForm] = useState({
+    date: nextSundayISO(),
+    start_time: '08:00',
+    location: '',
+    max_slots: 20,
+    presence_open: true,
+    format: 'times',
+    game_minutes: 10,
+    game_goals: 2,
+  })
   const [players, setPlayers] = useState([])
   const [helperIds, setHelperIds] = useState([])
   const [diaristaIds, setDiaristaIds] = useState([])
@@ -56,6 +65,8 @@ export default function PeladaForm() {
   const isOwner = profile.role === 'dono'
   const [msg, setMsg] = useState({})
   const [busy, setBusy] = useState(false)
+  // troca de formato pendente de confirmação (a pelada já tem times ou chegadas)
+  const [formatChange, setFormatChange] = useState(null)
 
   useEffect(() => {
     fetchActivePlayers().then(setPlayers)
@@ -63,11 +74,22 @@ export default function PeladaForm() {
       // sugere o local da última pelada
       supabase
         .from('peladas')
-        .select('location, start_time, max_slots')
+        .select('location, start_time, max_slots, game_minutes, game_goals')
         .order('date', { ascending: false })
         .limit(1)
         .maybeSingle()
-        .then(({ data }) => data && setForm((f) => ({ ...f, location: data.location, start_time: data.start_time.slice(0, 5), max_slots: data.max_slots })))
+        .then(
+          ({ data }) =>
+            data &&
+            setForm((f) => ({
+              ...f,
+              location: data.location,
+              start_time: data.start_time.slice(0, 5),
+              max_slots: data.max_slots,
+              game_minutes: data.game_minutes,
+              game_goals: data.game_goals,
+            })),
+        )
       return
     }
     setPelada(undefined)
@@ -76,9 +98,12 @@ export default function PeladaForm() {
       supabase.from('pelada_helpers').select('profile_id').eq('pelada_id', id),
       supabase.from('pelada_diaristas').select('profile_id').eq('pelada_id', id),
       supabase.rpc('diaristas_liberados', { p_pelada: Number(id) }),
-    ]).then(([p, h, d, ok]) => {
+      supabase.from('teams').select('id', { count: 'exact', head: true }).eq('pelada_id', id),
+      supabase.from('games').select('id', { count: 'exact', head: true }).eq('pelada_id', id),
+      supabase.from('rodizio_arrivals').select('id', { count: 'exact', head: true }).eq('pelada_id', id),
+    ]).then(([p, h, d, ok, t, g, a]) => {
       setDiaristasOk(ok.data !== false)
-      setPelada(p.data)
+      setPelada({ ...p.data, has_teams: Boolean(t.count || a.count), has_games: Boolean(g.count) })
       setForm({ ...p.data, start_time: p.data.start_time.slice(0, 5) })
       setHelperIds((h.data ?? []).map((x) => x.profile_id))
       setDiaristaIds((d.data ?? []).map((x) => x.profile_id))
@@ -88,6 +113,26 @@ export default function PeladaForm() {
   const byId = Object.fromEntries(players.map((p) => [p.id, p]))
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
   const locked = pelada && ['encerrada', 'cancelada'].includes(pelada.status)
+  // formato só muda antes do primeiro jogo; com times montados, pede confirmação (apaga os times)
+  const formatLocked = Boolean(locked || pelada?.has_games)
+  function pickFormat(format) {
+    if (formatLocked || format === form.format) return
+    if (pelada?.has_teams) setFormatChange(format)
+    else setForm((f) => ({ ...f, format }))
+  }
+  async function changeFormat() {
+    setBusy(true)
+    setMsg({})
+    const { error } = await supabase.rpc('set_pelada_format', { p_pelada: Number(id), p_format: formatChange })
+    setBusy(false)
+    if (error) setMsg({ error: friendlyError(error) })
+    else {
+      setForm((f) => ({ ...f, format: formatChange }))
+      setPelada((p) => ({ ...p, format: formatChange, has_teams: false }))
+      setMsg({ ok: formatChange === 'rodizio' ? 'Pelada agora é em rodízio. Os times foram apagados.' : 'Pelada agora tem times. Defina os capitães ou faça o sorteio.' })
+    }
+    setFormatChange(null)
+  }
 
   async function save(e) {
     e.preventDefault()
@@ -99,6 +144,9 @@ export default function PeladaForm() {
       location: form.location.trim(),
       max_slots: Number(form.max_slots),
       presence_open: form.presence_open,
+      format: form.format,
+      game_minutes: Number(form.game_minutes),
+      game_goals: Number(form.game_goals),
     }
     try {
       if (isNew) {
@@ -141,7 +189,7 @@ export default function PeladaForm() {
     setBusy(false)
     if (error) return setMsg({ error: friendlyError(error) })
     const { data } = await supabase.from('peladas').select('*').eq('id', id).single()
-    setPelada(data)
+    setPelada((p) => ({ ...data, has_teams: p?.has_teams, has_games: p?.has_games }))
     setMsg({ ok: data.status === 'agendada' ? 'Pelada reativada.' : 'Pelada reaberta: encerre de novo depois de corrigir.' })
   }
 
@@ -185,6 +233,31 @@ export default function PeladaForm() {
           <input type="checkbox" className="h-5 w-5 accent-action" checked={form.presence_open} onChange={set('presence_open')} disabled={locked} />
           <span className="text-sm">Lista de presença aberta</span>
         </label>
+        <div className="col-span-2">
+          <div className="label">Formato</div>
+          <Segmented
+            value={form.format}
+            onChange={pickFormat}
+            options={[
+              ['times', 'Times da pelada'],
+              ['rodizio', 'Rodízio'],
+            ]}
+          />
+          <div className="mt-1 text-xs text-muted">
+            {form.format === 'rodizio'
+              ? 'Para dias atípicos: quem chega entra na fila, quem ganha fica e o próximo time sai da fila (vantagem para quem está há mais jogos sem jogar).'
+              : '4 times de 5 montados antes do dia: capitães, capitães invertidos, bilhete dourado ou sorteio.'}
+            {formatLocked && !locked && ' Não muda depois do primeiro jogo.'}
+          </div>
+        </div>
+        <div>
+          <label className="label" htmlFor="gm">Jogo acaba em (min)</label>
+          <input id="gm" className="field" type="number" min="1" max="60" inputMode="numeric" value={form.game_minutes} onChange={set('game_minutes')} required disabled={locked} />
+        </div>
+        <div>
+          <label className="label" htmlFor="gg">ou em (gols)</label>
+          <input id="gg" className="field" type="number" min="1" max="20" inputMode="numeric" value={form.game_goals} onChange={set('game_goals')} required disabled={locked} />
+        </div>
       </form>
 
       <SectionLabel>Ajudantes desta pelada</SectionLabel>
@@ -223,7 +296,7 @@ export default function PeladaForm() {
         <Notice kind="ok">{msg.ok}</Notice>
       </div>
 
-      {!isNew && pelada?.status === 'agendada' && (
+      {!isNew && pelada?.status === 'agendada' && form.format !== 'rodizio' && (
         <div className="flex gap-2 px-4 pt-3">
           <Link to={`/admin/peladas/${id}/capitaes`} className="btn-ghost flex flex-1 items-center justify-center text-sm">
             Definir capitães
@@ -236,6 +309,11 @@ export default function PeladaForm() {
 
       {!locked && (
         <div className="px-4 pt-3">
+          {!isNew && (
+            <button type="button" className="btn-ghost mb-2 w-full" onClick={() => (window.history.state?.idx > 0 ? navigate(-1) : navigate(`/pelada/${id}`))}>
+              Voltar
+            </button>
+          )}
           <button form="pelada" className="btn w-full" disabled={busy}>
             {isNew ? 'Criar pelada' : 'Salvar alterações'}
           </button>
@@ -249,9 +327,6 @@ export default function PeladaForm() {
 
       {!isNew && (
         <div className="space-y-1 px-4 pt-3">
-          <Link to={`/pelada/${id}`} className="btn-ghost flex items-center justify-center text-sm">
-            Abrir pelada (times e jogos)
-          </Link>
           {(pelada.status === 'cancelada' || (pelada.status === 'encerrada' && isOwner)) && (
             <button className="btn-ghost flex w-full items-center justify-center gap-2 text-sm" disabled={busy} onClick={reopen}>
               <RotateCcw size={16} /> {pelada.status === 'cancelada' ? 'Reativar pelada (cancelada por engano)' : 'Reabrir pelada encerrada'}
@@ -263,6 +338,25 @@ export default function PeladaForm() {
             </button>
           )}
         </div>
+      )}
+
+      {formatChange && (
+        <Sheet
+          title={formatChange === 'rodizio' ? 'Trocar para rodízio?' : 'Trocar para times da pelada?'}
+          subtitle={
+            formatChange === 'rodizio'
+              ? 'Esta pelada já tem times (capitães, escolhas, kits e estratégias). Tudo isso será apagado e os times passam a sair na hora, jogo a jogo.'
+              : 'A lista de quem chegou no rodízio será apagada. Depois, defina os capitães ou faça o sorteio.'
+          }
+          onClose={() => setFormatChange(null)}
+        >
+          <button className="btn w-full border-[#B3362B] bg-[#B3362B]" disabled={busy} onClick={changeFormat}>
+            Sim, trocar e apagar
+          </button>
+          <button className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setFormatChange(null)}>
+            Cancelar
+          </button>
+        </Sheet>
       )}
 
       {deleteOpen && (
@@ -294,7 +388,7 @@ export default function PeladaForm() {
         <PlayerPicker
           title="Chamar diaristas"
           subtitle="Eles poderão marcar presença nesta pelada."
-          players={players.filter((p) => p.type === 'diarista')}
+          players={players.filter((p) => p.type === 'diarista' && p.goalkeeper !== 'so_goleiro')}
           selectedIds={diaristaIds}
           onPick={(p) => toggle('pelada_diaristas', diaristaIds, setDiaristaIds, p)}
           onClose={() => setPicker(null)}

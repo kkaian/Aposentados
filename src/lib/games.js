@@ -10,6 +10,7 @@ export const EVENT_LABEL = {
   amarelo: 'Cartão amarelo',
   vermelho: 'Cartão vermelho',
   substituicao: 'Substituição',
+  defesa_dificil: 'Defesa difícil',
 }
 
 export const GAME_STATUS_LABEL = { agendado: 'A seguir', ao_vivo: 'Ao vivo', finalizado: 'Finalizado' }
@@ -63,14 +64,16 @@ export function describeEvent(e, name) {
 export async function fetchGame(gameId) {
   const { data: game } = await supabase.from('games').select('*').eq('id', gameId).maybeSingle()
   if (!game) return null
-  const [{ data: pelada }, teams, { data: lineup }, { data: events }, { data: guests }, { data: profiles }, { data: helpers }] = await Promise.all([
+  const [{ data: pelada }, teams, { data: lineup }, { data: events }, { data: guests }, { data: profiles }, { data: helpers }, { data: keepers }, { data: going }] = await Promise.all([
     supabase.from('peladas').select('*').eq('id', game.pelada_id).single(),
     fetchTeams(game.pelada_id),
     supabase.from('game_lineup').select('*').eq('game_id', gameId).order('id'),
     supabase.from('game_events').select('*').eq('game_id', gameId).order('minute').order('id'),
     supabase.from('guests').select('id, name').eq('pelada_id', game.pelada_id),
-    supabase.from('profiles').select('id, name, photo_path, role, type').eq('status', 'ativo'),
+    supabase.from('profiles').select('id, name, photo_path, role, type, goalkeeper').eq('status', 'ativo'),
     supabase.from('pelada_helpers').select('profile_id').eq('pelada_id', game.pelada_id),
+    supabase.from('game_keepers').select('*').eq('game_id', gameId).order('entered_minute').order('id'),
+    supabase.from('presence').select('profile_id').eq('pelada_id', game.pelada_id).eq('answer', 'vou'),
   ])
   return {
     game,
@@ -83,7 +86,15 @@ export async function fetchGame(gameId) {
     guests: guests ?? [],
     profiles: profiles ?? [],
     helperIds: (helpers ?? []).map((h) => h.profile_id),
+    keepers: keepers ?? [],
+    goingIds: new Set((going ?? []).map((g) => g.profile_id)),
   }
+}
+
+// Goleiro em campo agora (ou o último, com o jogo encerrado) de um time; null = sem goleiro
+export function currentKeeper(keepers, teamId) {
+  const list = keepers.filter((k) => k.team_id === teamId)
+  return list.find((k) => k.left_minute == null) ?? null
 }
 
 // Jogos e eventos de uma pelada (placar, resumo do dia)

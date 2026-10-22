@@ -26,7 +26,7 @@ async function expect_fail(fn) {
   throw new Error('devia ter sido recusado')
 }
 const U = {}; const id = (n) => (U[n] ??= crypto.randomUUID())
-const mkUser = (n, meta) => q(`insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data, created_at, updated_at) values ($1,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',$2,$3,now(),now())`, [id(n), n + '@aposentados.app', meta])
+const mkUser = (n, meta) => q(`insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data, created_at, updated_at) values ($1,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',$2,$3,now(),now())`, [id(n), 'teste_' + n + '@aposentados.app', meta])
 const one = async (s, p) => (await q(s, p)).rows[0]
 
 await q('begin')
@@ -276,7 +276,7 @@ try {
 
   // escolha dos times
   await as(id('adm'))
-  const pel2 = (await one(`insert into peladas (date, start_time, location, max_slots) values ('2026-10-18','08:00','Campo',20) returning id`)).id
+  const pel2 = (await one(`insert into peladas (date, start_time, location, max_slots) values (current_date + 21,'08:00','Campo',20) returning id`)).id
   // presença é só status: j4 (capitão) e j9 não responderam; dono e adm não vão
   for (const n of ['j1', 'j2', 'j3', 'j5', 'j6', 'j7', 'j8', 'j10']) await q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'vou')`, [pel2, id(n)])
   for (const n of ['dono', 'adm']) await q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'nao_vou')`, [pel2, id(n)])
@@ -325,7 +325,7 @@ try {
   await expect('no horário da pelada, o resto vira vaga e cada time fecha com 5', async () => {
     await q(`update peladas set date = current_date - 1 where id=$1`, [pel2])
     await q(`select draft_tick()`)
-    await q(`update peladas set date = '2026-10-18' where id=$1`, [pel2])
+    await q(`update peladas set date = current_date + 21 where id=$1`, [pel2])
     const d = await one(`select phase from drafts where pelada_id=$1`, [pel2])
     const r = await q(`select count(*)::int n from team_members where pelada_id=$1 group by team_id order by 1`, [pel2])
     return `fase=${d.phase}, por time: ${r.rows.map((x) => x.n).join(',')}`
@@ -656,6 +656,321 @@ try {
     const fee = (await one(`select id from charges where kind='mensalidade' and month=current_month()`)).id
     return q(`select delete_charge($1)`, [fee])
   }, true)
+
+  // goleiro: "dia" é só goleiro (diarista); j3 e j7 são mensalistas e também goleiros (j3 joga num dos times)
+  await as(id('j5'))
+  await expect('jogador não marca goleiro', () => q(`select set_goalkeeper($1, 'so_goleiro')`, [id('dia')]), true)
+  await as(id('adm'))
+  await expect('admin marca diarista como só goleiro', () => q(`select set_goalkeeper($1, 'so_goleiro')`, [id('dia')]))
+  await expect('mensalista não pode ser só goleiro', () => q(`select set_goalkeeper($1, 'so_goleiro')`, [id('j1')]), true)
+  await expect('mensalista pode ser também goleiro', async () => {
+    await q(`select set_goalkeeper($1, 'tambem')`, [id('j3')])
+    await q(`select set_goalkeeper($1, 'tambem')`, [id('j7')])
+  })
+  await expect('só goleiro não vira mensalista', () => q(`select set_player_type($1, 'mensalista')`, [id('dia')]), true)
+  const pg = (await one(`insert into peladas (date, start_time, location, max_slots) values ('2026-10-04','08:00','Campo',20) returning id`)).id
+  await expect('só goleiro não é chamado como diarista', () => q(`insert into pelada_diaristas values ($1,$2)`, [pg, id('dia')]), true)
+  await as(id('dia'))
+  await expect('só goleiro confirma presença', () => q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'vou')`, [pg, id('dia')]))
+  await expect('só goleiro não ocupa vaga na lista de presença', async () => {
+    const r = await one(`select count(*)::int n from presence_list where pelada_id = $1`, [pg])
+    if (r.n) throw new Error(`${r.n} na lista`)
+    return 'fora da contagem'
+  })
+  await as(id('adm'))
+  const tga = (await one(`insert into teams (pelada_id, captain_order, captain_id, color) values ($1,1,$2,'azul') returning id`, [pg, id('j1')])).id
+  const tgb = (await one(`insert into teams (pelada_id, captain_order, captain_id, color) values ($1,2,$2,'vermelho') returning id`, [pg, id('j2')])).id
+  for (const [n, t] of [['j1', tga], ['j3', tga], ['j5', tga], ['j2', tgb], ['j4', tgb]]) await q(`insert into team_members (pelada_id, team_id, profile_id) values ($1,$2,$3)`, [pg, t, id(n)])
+  await q(`insert into presence (pelada_id, profile_id, answer) values ($1,$2,'vou')`, [pg, id('j7')])
+  const gg = (await one(`insert into games (pelada_id, number, team1_id, team2_id) values ($1,1,$2,$3) returning id`, [pg, tga, tgb])).id
+  await expect('admin põe o só goleiro no gol do time B', () => q(`select set_keeper($1,$2,$3)`, [gg, tgb, id('dia')]))
+  await expect('quem está num dos times do jogo não agarra (j3 joga no time A)', () => q(`select set_keeper($1,$2,$3)`, [gg, tga, id('j3')]), true)
+  await expect('j7 (também goleiro, time dele fora deste jogo) agarra pelo time A', () => q(`select set_keeper($1,$2,$3)`, [gg, tga, id('j7')]))
+  await expect('quem não é goleiro não vai para o gol', () => q(`select set_keeper($1,$2,$3)`, [gg, tgb, id('j4')]), true)
+  await expect('o mesmo goleiro não agarra pelos dois times', () => q(`select set_keeper($1,$2,$3)`, [gg, tga, id('dia')]), true)
+  await as(id('j5'))
+  await expect('jogador comum não define goleiro', () => q(`select set_keeper($1,$2,null,true)`, [gg, tga]), true)
+  await as(id('adm'))
+  await q(`select start_game($1)`, [gg])
+  await as(null)
+  await q(`update games set started_at = now() - interval '5 minutes' where id = $1`, [gg])
+  await as(id('adm'))
+  const ev = (type, team, player, minute, assist = null) =>
+    q(`insert into game_events (game_id, type, team_id, player_id, assist_id, minute) values ($1,$2,$3,$4,$5,$6)`, [gg, type, team, player, assist, minute])
+  await expect('goleiro faz defesa difícil', () => ev('defesa_dificil', tgb, id('dia'), 1))
+  await expect('defesa difícil de quem não é o goleiro é recusada', () => ev('defesa_dificil', tgb, id('j4'), 1), true)
+  await expect('gols sofridos e assistência do goleiro', async () => {
+    await ev('gol', tga, id('j1'), 2)
+    await ev('gol', tga, id('j1'), 3, id('j7'))
+    await ev('gol', tgb, id('j2'), 4, id('dia'))
+    return 'A 2 x 1 B'
+  })
+  await expect('troca no meio do jogo: goleiro avulso entra no minuto 5', () => q(`select set_keeper($1,$2,null,true)`, [gg, tgb]))
+  await expect('gol depois da troca não conta para o goleiro que saiu', async () => {
+    await ev('gol', tga, id('j5'), 6)
+    await q(`select finish_game($1)`, [gg])
+    await q(`select close_pelada($1)`, [pg])
+    const r = await one(`select games, wins, conceded, assists, saves from goalkeeper_month_stats where profile_id = $1 and month = '2026-10-01'`, [id('dia')])
+    if (JSON.stringify(r) !== JSON.stringify({ games: 1, wins: 0, conceded: 2, assists: 1, saves: 1 })) throw new Error(JSON.stringify(r))
+    return JSON.stringify(r)
+  })
+  await expect('j7 agarrou: vitória, gol sofrido e assistência* contam como goleiro', async () => {
+    const r = await one(`select games, wins, conceded, assists, saves from goalkeeper_month_stats where profile_id = $1`, [id('j7')])
+    if (JSON.stringify(r) !== JSON.stringify({ games: 1, wins: 1, conceded: 1, assists: 1, saves: 0 })) throw new Error(JSON.stringify(r))
+    return JSON.stringify(r)
+  })
+  await expect('o jogo em que j7 agarrou não conta como jogo de linha nem a assistência', async () => {
+    const r = await one(`select coalesce(sum(games),0)::int games, coalesce(sum(assists),0)::int assists from player_month_stats where profile_id = $1 and month = '2026-10-01'`, [id('j7')])
+    if (r.games || r.assists) throw new Error(JSON.stringify(r))
+    return JSON.stringify(r)
+  })
+  await as(id('j1'))
+  await expect('mensalista dá nota de goleiro', () => q(`insert into goalkeeper_ratings (rater_id, rated_id, hands, feet, reach, jump, overall) values ($1,$2,4,3,5,4,4)`, [id('j1'), id('dia')]))
+  await expect('nota de goleiro só para goleiros', () => q(`insert into goalkeeper_ratings (rater_id, rated_id, hands, feet, reach, jump, overall) values ($1,$2,4,3,5,4,4)`, [id('j1'), id('j2')]), true)
+  await as(id('dia'))
+  await expect('só goleiro (diarista) não avalia', () => q(`insert into goalkeeper_ratings (rater_id, rated_id, hands, feet, reach, jump, overall) values ($1,$2,4,3,5,4,4)`, [id('dia'), id('j3')]), true)
+
+  // estratégia (gramadinho): time E1 = j1 (capitão), j3, j5; time E2 = j2 (capitão), j4
+  // as notificações vão para uma tabela temporária (desfeita no fim) para conferir quem receberia
+  await as(null)
+  await q(`create temp table pushes (to_ids uuid[], title text)`)
+  await q(`grant all on pg_temp.pushes to authenticated`)
+  await q(`create or replace function private.push(p_to uuid[], p_title text, p_body text, p_url text default '/') returns void
+           language sql security definer as $$ insert into pg_temp.pushes values (p_to, p_title) $$`)
+  const pushedTo = async (title) => (await q(`select unnest(to_ids) id from pg_temp.pushes where title = $1`, [title])).rows.map((r) => r.id)
+  await as(id('adm'))
+  const pe = (await one(`insert into peladas (date, start_time, location, max_slots) values (current_date + 35,'08:00','Campo',20) returning id`)).id
+  const te1 = (await one(`insert into teams (pelada_id, captain_order, captain_id, color) values ($1,1,$2,'azul') returning id`, [pe, id('j1')])).id
+  const te2 = (await one(`insert into teams (pelada_id, captain_order, captain_id, color) values ($1,2,$2,'vermelho') returning id`, [pe, id('j2')])).id
+  const mem = {}
+  for (const [n, t] of [['j1', te1], ['j3', te1], ['j5', te1], ['j2', te2], ['j4', te2]])
+    mem[n] = (await one(`insert into team_members (pelada_id, team_id, profile_id, is_captain) values ($1,$2,$3,$4) returning id`, [pe, t, id(n), n === 'j1' || n === 'j2'])).id
+  const save = (team, slots, instr = []) => q(`select save_tactic($1,'2-1-2',$2,$3)`, [team, slots, instr])
+  await as(id('j1'))
+  await expect('capitão monta a estratégia', () => save(te1, [mem.j1, mem.j3, null, null, null], ['Marcar a saída', '  ', 'Tocar rápido']))
+  await expect('instruções vazias somem', async () => JSON.stringify((await one(`select instructions from team_tactics where team_id=$1`, [te1])).instructions))
+  await expect('o time (menos o capitão) é avisado da estratégia', async () => {
+    const to = await pushedTo('Estratégia do time')
+    if (to.length !== 2 || !to.includes(id('j3')) || !to.includes(id('j5'))) throw new Error(JSON.stringify(to))
+    return 'j3 e j5'
+  })
+  await expect('jogador de outro time não entra no gramado', () => save(te1, [mem.j1, mem.j2, null, null, null]), true)
+  await expect('mesmo jogador em duas posições é recusado', () => save(te1, [mem.j1, mem.j1, null, null, null]), true)
+  await expect('no máximo 5 instruções', () => save(te1, [mem.j1, null, null, null, null], ['a', 'b', 'c', 'd', 'e', 'f']), true)
+  await expect('instrução com mais de 80 caracteres é recusada', () => save(te1, [mem.j1, null, null, null, null], ['x'.repeat(81)]), true)
+  await as(id('j3'))
+  await expect('jogador do time não edita a estratégia', () => save(te1, [mem.j3, null, null, null, null]), true)
+  await expect('jogador do time vê a estratégia', async () => (await one(`select count(*)::int n from team_tactics where team_id=$1`, [te1])).n + ' estratégia')
+  await expect('jogador confirma que entendeu', () => q(`select ack_tactic($1)`, [te1]))
+  await as(id('j2'))
+  await expect('outro time não vê a estratégia', async () => {
+    const r = await one(`select count(*)::int n from team_tactics where team_id=$1`, [te1])
+    if (r.n) throw new Error('viu')
+    return 'escondida'
+  })
+  await expect('capitão de outro time não mexe', () => save(te1, [mem.j1, null, null, null, null]), true)
+  await expect('outro time não confirma a estratégia', () => q(`select ack_tactic($1)`, [te1]), true)
+  await as(id('j5'))
+  await expect('jogador pede para trocar de posição com um colega', () => q(`select request_swap($1,$2)`, [te1, mem.j3]))
+  await expect('não pede troca com alguém de outro time', () => q(`select request_swap($1,$2)`, [te1, mem.j4]), true)
+  await expect('capitão é avisado do pedido de troca', async () => {
+    const to = await pushedTo('Pedido de troca de posição')
+    if (to.length !== 1 || to[0] !== id('j1')) throw new Error(JSON.stringify(to))
+    return 'j1'
+  })
+  await as(id('j3'))
+  await expect('só o capitão aceita a troca', async () => q(`select answer_swap($1,true)`, [(await one(`select id from tactic_swaps where team_id=$1 and status='pendente'`, [te1])).id]), true)
+  await as(id('j1'))
+  await expect('capitão aceita: j5 fica na posição de j3', async () => {
+    await q(`select answer_swap($1,true)`, [(await one(`select id from tactic_swaps where team_id=$1 and status='pendente'`, [te1])).id])
+    const s = (await one(`select slots from team_tactics where team_id=$1`, [te1])).slots.map(Number)
+    if (s[1] !== Number(mem.j5) || s.includes(Number(mem.j3))) throw new Error(JSON.stringify(s))
+    return 'trocado'
+  })
+  await expect('quem pediu é avisado que a troca foi aceita', async () => {
+    const to = await pushedTo('Troca aceita')
+    if (to.length !== 1 || to[0] !== id('j5')) throw new Error(JSON.stringify(to))
+    return 'j5'
+  })
+  await expect('pelada encerrada: a estratégia some', async () => {
+    await as(id('adm'))
+    await q(`select close_pelada($1)`, [pe])
+    await as(null)
+    const r = await one(`select count(*)::int n from team_tactics where team_id in ($1,$2)`, [te1, te2])
+    if (r.n) throw new Error(`${r.n} ainda existem`)
+    return 'apagada'
+  })
+
+  // capitães invertidos: capitães j1..j4; os outros mensalistas escolhem o time
+  await as(id('adm'))
+  const pi = (await one(`insert into peladas (date, start_time, location, max_slots) values (current_date + 42,'08:00','Campo',20) returning id`)).id
+  await expect('admin define capitães no modo invertido', () => q(`select define_captains_inverted($1,$2)`, [pi, [id('j1'), id('j2'), id('j3'), id('j4')]]))
+  const ti = async (order) => (await one(`select id from teams where pelada_id=$1 and captain_order=$2`, [pi, order])).id
+  const avail = (await q(`select a.profile_id from draft_available($1) a join profiles p on p.id = a.profile_id where p.type='mensalista' order by p.username`, [pi])).rows.map((r) => r.profile_id)
+  await expect('mensalistas disponíveis são avisados para escolher o time', async () => {
+    const to = await pushedTo('Escolha o seu time!')
+    if (to.length !== avail.length) throw new Error(`${to.length} avisados de ${avail.length}`)
+    return `${to.length} avisados`
+  })
+  const choose = async (who, order) => { await as(who); return q(`select invert_choose($1)`, [await ti(order)]) }
+  await expect('6 mensalistas escolhem o time 1 e 1 escolhe o time 2', async () => {
+    for (const who of avail.slice(0, 6)) await choose(who, 1)
+    await choose(avail[6], 2)
+    return `${avail.length} disponíveis`
+  })
+  await expect('capitão é avisado quando o time passa de 4', async () => {
+    const to = await pushedTo('Seu time tem mais de 4 querendo jogar')
+    if (to.length !== 1 || to[0] !== id('j1')) throw new Error(JSON.stringify(to))
+    return 'j1'
+  })
+  await expect('capitão não escolhe jogador no modo invertido', async () => { await as(id('j1')); return q(`select draft_pick($1,$2)`, [pi, avail[7]]) }, true)
+  await expect('capitão de outro time não corta', async () => { await as(id('j2')); return q(`select invert_cut($1,$2)`, [pi, avail[0]]) }, true)
+  await expect('capitão corta dois e o time fica com 4', async () => {
+    await as(id('j1'))
+    await q(`select invert_cut($1,$2)`, [pi, avail[0]])
+    await q(`select invert_cut($1,$2)`, [pi, avail[1]])
+    return (await one(`select count(*)::int n from invert_choices where team_id=$1`, [await ti(1)])).n + ' no time 1'
+  })
+  await expect('com 4, o capitão não corta mais', async () => { await as(id('j1')); return q(`select invert_cut($1,$2)`, [pi, avail[2]]) }, true)
+  await expect('quem foi cortado é avisado', async () => {
+    const to = await pushedTo('Você ficou fora do time')
+    if (!to.includes(avail[0]) || !to.includes(avail[1])) throw new Error(JSON.stringify(to))
+    return '2 avisados'
+  })
+  await expect('cortado não volta para o mesmo time', () => choose(avail[0], 1), true)
+  await expect('cortado escolhe outro time', () => choose(avail[0], 3))
+  await expect('capitão escolhe kit e cor sem esperar vez', async () => { await as(id('j3')); return q(`select choose_identity($1,null,'laranja')`, [await ti(3)]) })
+  await expect('fim das 24 h: times fechados com 5, sobra vai para onde falta', async () => {
+    await as(null)
+    await q(`update drafts set free_until = now() - interval '1 minute' where pelada_id=$1`, [pi])
+    await q(`select draft_tick()`)
+    const d = await one(`select phase from drafts where pelada_id=$1`, [pi])
+    const sizes = (await q(`select count(*)::int n from team_members where pelada_id=$1 and not is_out group by team_id order by team_id`, [pi])).rows.map((r) => r.n)
+    const t1 = (await q(`select profile_id from team_members where team_id=$1 and not is_captain`, [await ti(1)])).rows.map((r) => r.profile_id)
+    const cutPlaced = await one(`select team_id from team_members where pelada_id=$1 and profile_id=$2`, [pi, avail[1]])
+    if (d.phase !== 'concluida' || sizes.some((n) => n !== 5)) throw new Error(`fase=${d.phase} tamanhos=${sizes}`)
+    if (!avail.slice(2, 6).every((p) => t1.includes(p))) throw new Error('escolhas do time 1 não entraram')
+    if (cutPlaced && Number(cutPlaced.team_id) === Number(await ti(1))) throw new Error('cortado voltou para o time 1')
+    const slots = (await one(`select count(*)::int n from team_members where pelada_id=$1 and is_slot`, [pi])).n
+    return `tamanhos ${sizes.join(',')}, ${slots} vaga(s) de diarista`
+  })
+
+  // bilhete dourado com sorteio: j5 escolhe 4 e o app sorteia o resto
+  await as(id('adm'))
+  const pgd = (await one(`insert into peladas (date, start_time, location, max_slots) values (current_date + 49,'08:00','Campo',20) returning id`)).id
+  await expect('admin dá o bilhete dourado a j5 (resto por sorteio)', () => q(`select define_golden($1,$2,'sorteio')`, [pgd, id('j5')]))
+  await expect('dono do bilhete é avisado', async () => ((await pushedTo('Bilhete dourado!')).includes(id('j5')) ? 'j5' : Promise.reject(new Error('sem aviso'))))
+  const goldPool = (await q(`select a.profile_id from draft_available($1) a order by 1`, [pgd])).rows.map((r) => r.profile_id)
+  await expect('outro jogador não escolhe pelo dono do bilhete', async () => { await as(id('j6')); return q(`select draft_pick($1,$2)`, [pgd, goldPool[0]]) }, true)
+  await expect('dono do bilhete escolhe os 4 e os outros times saem no sorteio', async () => {
+    await as(id('j5'))
+    for (const p of goldPool.slice(0, 4)) await q(`select draft_pick($1,$2)`, [pgd, p])
+    const d = await one(`select phase from drafts where pelada_id=$1`, [pgd])
+    const sizes = (await q(`select count(*)::int n from team_members where pelada_id=$1 and not is_out group by team_id order by team_id`, [pgd])).rows.map((r) => r.n)
+    const mine = (await q(`select profile_id from team_members m join teams t on t.id = m.team_id where m.pelada_id=$1 and t.captain_order=1`, [pgd])).rows.map((r) => r.profile_id)
+    if (d.phase !== 'concluida' || sizes.some((n) => n !== 5)) throw new Error(`fase=${d.phase} tamanhos=${sizes}`)
+    if (!goldPool.slice(0, 4).every((p) => mine.includes(p))) throw new Error('escolhas do bilhete fora do time 1')
+    return `tamanhos ${sizes.join(',')}`
+  })
+
+  // bilhete dourado com capitães: sorteado; capitães j1, j2, j3 escolhem na ordem 2-3-4 · 4-2-3
+  await as(id('adm'))
+  const pgc = (await one(`insert into peladas (date, start_time, location, max_slots) values (current_date + 56,'08:00','Campo',20) returning id`)).id
+  await expect('capitães do resto precisam ser 3', () => q(`select define_golden($1,null,'capitaes',$2)`, [pgc, [id('j1'), id('j2')]]), true)
+  let golden
+  await expect('bilhete dourado sorteado (resto com 3 capitães)', async () => {
+    golden = (await one(`select define_golden($1,null,'capitaes',$2) g`, [pgc, [id('j1'), id('j2'), id('j3')]])).g
+    if ([id('j1'), id('j2'), id('j3')].includes(golden)) throw new Error('capitão ganhou o bilhete')
+    return 'sorteado'
+  })
+  await expect('capitão espera o dono do bilhete', async () => {
+    await as(id('j1'))
+    return q(`select draft_pick($1,(select profile_id from draft_available($1) limit 1))`, [pgc])
+  }, true)
+  await expect('depois das 4 do bilhete, a vez é do capitão do time 2, depois 3, 4, 4, 2', async () => {
+    await as(golden)
+    for (let i = 0; i < 4; i++) await q(`select draft_pick($1,(select profile_id from draft_available($1) limit 1))`, [pgc])
+    const order = []
+    for (const cap of ['j1', 'j2', 'j3', 'j3', 'j1']) {
+      await as(id(cap))
+      await q(`select draft_pick($1,(select profile_id from draft_available($1) limit 1))`, [pgc])
+      order.push(cap)
+    }
+    const n = (await one(`select next_pick from drafts where pelada_id=$1`, [pgc])).next_pick
+    if (n !== 10) throw new Error('próxima escolha ' + n)
+    return order.join(' ')
+  })
+
+  // rodízio: 12 chegam (11 com conta + 1 avulso), 5 contra 5, quem ganha fica
+  await as(id('adm'))
+  const pr = (await one(`insert into peladas (date, start_time, location, max_slots, format) values (current_date + 63,'08:00','Campo',30,'rodizio') returning id`)).id
+  const rod = ['j1', 'j2', 'j3', 'j4', 'j5', 'j6', 'j7', 'j8', 'j9', 'j10', 'dia']
+  await as(id('j5'))
+  await expect('jogador comum não marca chegada', () => q(`select rodizio_arrive($1,$2)`, [pr, id('j5')]), true)
+  await as(id('adm'))
+  await expect('admin marca quem chegou (com conta e avulso)', async () => {
+    for (const n of rod) await q(`select rodizio_arrive($1,$2)`, [pr, id(n)])
+    await q(`select rodizio_arrive($1,null,'Zé da Esquina')`, [pr])
+    return (await one(`select count(*)::int n from rodizio_queue($1)`, [pr])).n + ' na fila'
+  })
+  await expect('não marca a mesma chegada duas vezes', () => q(`select rodizio_arrive($1,$2)`, [pr, id('j1')]), true)
+  const guestZe = (await one(`select id from guests where pelada_id=$1 and name='Zé da Esquina'`, [pr])).id
+  const side = (names) => JSON.stringify(names.map((n) => (n === 'ze' ? { guest_id: Number(guestZe) } : { profile_id: id(n) })))
+  await expect('time com 6 é recusado', () => q(`select rodizio_create_game($1,null,$2,$3)`, [pr, side(['j1', 'j2', 'j3', 'j4', 'j5', 'j6']), side(['j7'])]), true)
+  await expect('mesmo jogador nos dois times é recusado', () => q(`select rodizio_create_game($1,null,$2,$3)`, [pr, side(['j1']), side(['j1'])]), true)
+  await expect('quem não chegou não joga', () => q(`select rodizio_create_game($1,null,$2,$3)`, [pr, side(['dono']), side(['j1'])]), true)
+  let rg1
+  await expect('jogo 1: 5 contra 5', async () => {
+    rg1 = (await one(`select rodizio_create_game($1,null,$2,$3) g`, [pr, side(['j1', 'j2', 'j3', 'j4', 'j5']), side(['j6', 'j7', 'j8', 'j9', 'ze'])])).g
+    return (await one(`select count(*)::int n from game_lineup where game_id=$1`, [rg1])).n + ' em campo'
+  })
+  await expect('não cria outro jogo com um marcado', () => q(`select rodizio_create_game($1,null,$2,$3)`, [pr, side(['j10']), side(['dia'])]), true)
+  await expect('jogo 1 termina: time A ganha', async () => {
+    const g = await one(`select team1_id from games where id=$1`, [rg1])
+    await q(`select start_game($1)`, [rg1])
+    await q(`insert into game_events (game_id, type, team_id, player_id) values ($1,'gol',$2,$3)`, [rg1, g.team1_id, id('j1')])
+    await q(`select finish_game($1)`, [rg1])
+    return 'A 1 x 0 B'
+  })
+  await expect('fila: j10 e dia estão há 1 jogo sem jogar; quem jogou, 0', async () => {
+    const r = (await q(`select profile_id, waiting, played from rodizio_queue($1) where profile_id is not null`, [pr])).rows
+    const w = (n) => r.find((x) => x.profile_id === id(n))
+    if (w('j10').waiting !== 1 || w('dia').waiting !== 1 || w('j6').waiting !== 0 || w('j1').played !== 1) throw new Error(JSON.stringify(r))
+    return 'ok'
+  })
+  let rg2
+  await expect('jogo 2: o time A fica e encara os que estavam fora', async () => {
+    const keep = (await one(`select team1_id from games where id=$1`, [rg1])).team1_id
+    rg2 = (await one(`select rodizio_create_game($1,$2,$3,$4) g`, [pr, keep, side(['j1', 'j2', 'j3', 'j4', 'j5']), side(['j10', 'dia', 'j6', 'j7', 'j8'])])).g
+    const g = await one(`select number, team1_id = $2 as ficou from games where id=$1`, [rg2, keep])
+    if (!g.ficou) throw new Error('time não ficou')
+    return `jogo ${g.number}`
+  })
+  await expect('cancela o jogo que não começou', async () => {
+    await q(`select rodizio_cancel_game($1)`, [rg2])
+    return (await one(`select count(*)::int n from games where pelada_id=$1`, [pr])).n + ' jogo(s)'
+  })
+  await expect('vitória do rodízio conta no mês de quem jogou', async () => {
+    await q(`select close_pelada($1)`, [pr])
+    const r = await one(`select coalesce(sum(wins),0)::int wins from player_month_stats where profile_id=$1 and month = public.month_of(current_date + 63)`, [id('j2')])
+    if (r.wins !== 1) throw new Error(JSON.stringify(r))
+    return '1 vitória'
+  })
+  await expect('pelada de times não aceita chegada de rodízio', async () => { await as(id('adm')); return q(`select rodizio_arrive($1,$2)`, [pgc, id('j1')]) }, true)
+  await expect('trocar para rodízio apaga os times da escolha', async () => {
+    await as(id('adm'))
+    await q(`select set_pelada_format($1,'rodizio')`, [pgc])
+    const r = await one(`select (select count(*)::int from teams where pelada_id=$1) times, (select format from peladas where id=$1) formato`, [pgc])
+    if (r.times || r.formato !== 'rodizio') throw new Error(JSON.stringify(r))
+    return JSON.stringify(r)
+  })
+  await expect('com jogo, o formato não muda mais', async () => {
+    await as(id('adm'))
+    const [a, b] = (await q(`select id from teams where pelada_id=$1 order by captain_order limit 2`, [pgd])).rows.map((r) => r.id)
+    await q(`select set_next_game($1,$2,$3)`, [pgd, a, b])
+    return q(`select set_pelada_format($1,'rodizio')`, [pgd])
+  }, true)
+  await expect('jogador não troca o formato', async () => { await as(id('j5')); return q(`select set_pelada_format($1,'times')`, [pgc]) }, true)
 
   // posse
   await as(id('dono'))

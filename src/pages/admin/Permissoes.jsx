@@ -5,6 +5,7 @@ import Sheet from '../../components/Sheet'
 import { AdminBadge, Notice, SectionLabel, Spinner } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { friendlyError } from '../../lib/errors'
+import { GOALKEEPER_LABEL } from '../../lib/positions'
 import { photoUrl } from '../../lib/storage'
 import { supabase } from '../../lib/supabase'
 
@@ -24,7 +25,7 @@ export default function Permissoes() {
   const [inactive, setInactive] = useState([])
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('id, name, username, role, type, photo_path, status').in('status', ['ativo', 'inativo'])
+    const { data } = await supabase.from('profiles').select('id, name, username, role, type, photo_path, status, goalkeeper').in('status', ['ativo', 'inativo'])
     const all = (data ?? []).sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.name.localeCompare(b.name))
     setPlayers(all.filter((p) => p.status === 'ativo'))
     setInactive(all.filter((p) => p.status === 'inativo'))
@@ -105,6 +106,7 @@ export default function Permissoes() {
             <div className="truncate">{p.name}</div>
             <div className="text-xs text-muted">
               @{p.username} · {p.type}
+              {p.goalkeeper && <span className="text-gold"> · {GOALKEEPER_LABEL[p.goalkeeper].toLowerCase()}</span>}
             </div>
           </div>
           {(p.role !== 'dono' || isOwner) && (
@@ -222,6 +224,28 @@ Senha temporária: ${access.password}`).then(() => setMsg({ ok: 'Copiado.' }), (
           >
             Salvar nome
           </button>
+          <div className="label mt-4">Goleiro</div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              [null, 'Não'],
+              ['tambem', 'Também goleiro'],
+              ['so_goleiro', 'Só goleiro'],
+            ].map(([mode, label]) => (
+              <button
+                key={label}
+                type="button"
+                disabled={busy !== null || (mode === 'so_goleiro' && editing.player.type === 'mensalista')}
+                onClick={() => run('gk', supabase.rpc('set_goalkeeper', { p_profile: editing.player.id, p_mode: mode }), mode ? `${editing.player.name}: ${GOALKEEPER_LABEL[mode].toLowerCase()}.` : `${editing.player.name} não é mais goleiro.`)}
+                className={`h-11 rounded-lg border text-sm disabled:opacity-40 ${editing.player.goalkeeper === mode ? 'border-action bg-action font-semibold text-white' : 'border-line-2'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            Também goleiro: joga na linha e às vezes agarra; os jogos em que agarra contam como goleiro. Só goleiro: fica fora da escolha dos times,
+            das vagas, do pódio e da mensalidade; só confirma presença e é posto no gol antes de cada jogo{editing.player.type === 'mensalista' ? ' (mensalista não pode ser só goleiro)' : ''}.
+          </p>
           {editing.player.role !== 'dono' && (editing.player.role !== 'admin' || isOwner) && editing.player.id !== me.id && (
             <>
               <button

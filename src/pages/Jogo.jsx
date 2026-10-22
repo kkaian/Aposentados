@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Lock, Pencil, Play, Trash2 } from 'lucide-react'
+import { ArrowLeftRight, ChevronLeft, Hand, Lock, Pencil, Play, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Avatar from '../components/Avatar'
@@ -9,7 +9,7 @@ import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
 import { dayLabel } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
-import { describeEvent, EVENT_LABEL, fetchGame, GAME_GOALS, GAME_MINUTES, makeNamer, minuteOf, scoreOf } from '../lib/games'
+import { currentKeeper, describeEvent, EVENT_LABEL, fetchGame, GAME_GOALS, GAME_MINUTES, makeNamer, minuteOf, scoreOf } from '../lib/games'
 import { photoUrl } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 
@@ -26,11 +26,11 @@ function useNow() {
   return now
 }
 
-function clock(game, now) {
-  if (game.status === 'agendado') return `${GAME_MINUTES}:00 · ou ${GAME_GOALS} gols`
+function clock(game, now, minutes, goals) {
+  if (game.status === 'agendado') return `${minutes}:00 · ou ${goals} gols`
   if (game.status === 'finalizado') return 'Finalizado'
-  const left = Math.max(0, GAME_MINUTES * 60 - Math.floor((now - Date.parse(game.started_at)) / 1000))
-  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} · ou ${GAME_GOALS} gols`
+  const left = Math.max(0, minutes * 60 - Math.floor((now - Date.parse(game.started_at)) / 1000))
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} · ou ${goals} gols`
 }
 
 function Btn({ children, className = '', ...props }) {
@@ -65,6 +65,7 @@ export default function Jogo() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'games', filter: `id=eq.${id}` }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_events', filter: `game_id=eq.${id}` }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_lineup', filter: `game_id=eq.${id}` }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_keepers', filter: `game_id=eq.${id}` }, load)
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [id, load])
@@ -77,9 +78,11 @@ export default function Jogo() {
   const canManage = isAdmin || isHelper || game?.recorder_id === profile.id
   const canRecord = game && ((game.status === 'ao_vivo' && canManage) || (isAdmin && game.status !== 'agendado'))
 
-  // fim do jogo: 10 min ou 2 gols -> tela de placar final para quem registra
-  const reachedEnd = game?.status === 'ao_vivo' && (Math.max(...score) >= GAME_GOALS || minuteOf(game, now) >= GAME_MINUTES)
-  const endKey = reachedEnd ? `${score.join('-')}-${minuteOf(game, now) >= GAME_MINUTES}` : null
+  // fim do jogo: regra da pelada (padrão 10 min ou 2 gols) -> tela de placar final para quem registra
+  const gameMinutes = data?.pelada?.game_minutes ?? GAME_MINUTES
+  const gameGoals = data?.pelada?.game_goals ?? GAME_GOALS
+  const reachedEnd = game?.status === 'ao_vivo' && (Math.max(...score) >= gameGoals || minuteOf(game, now) >= gameMinutes)
+  const endKey = reachedEnd ? `${score.join('-')}-${minuteOf(game, now) >= gameMinutes}` : null
   useEffect(() => {
     if (endKey && canManage && endShownFor.current !== endKey && !sheet) {
       endShownFor.current = endKey
@@ -90,21 +93,36 @@ export default function Jogo() {
   if (data === undefined) return <Spinner />
   if (!data) return <div className="p-6 text-center text-muted">Jogo não encontrado.</div>
 
-  const { pelada, team1, team2, lineup, events, guests, profiles, helperIds } = data
+  const { pelada, team1, team2, lineup, events, guests, profiles, helperIds, keepers, goingIds } = data
   const name = makeNamer(profiles, guests)
   const photoOf = Object.fromEntries(profiles.map((p) => [p.id, p.photo_path]))
+  // goleiro: admin ou ajudante define antes e durante o jogo; encerrado, só admin corrige
+  const canSetKeeper = game.status === 'finalizado' ? isAdmin : isAdmin || helperIds.includes(profile.id) || game.recorder_id === profile.id
+  // quem agarrou por este time neste jogo não aparece na linha
+  const keptFor = (teamId) =>
+    new Set(keepers.filter((k) => k.team_id === teamId && k.profile_id && (game.status === 'finalizado' || k.left_minute == null)).map((k) => k.profile_id))
   const penaltyTeam = [team1, team2].find((t) => t && t.id === game.penalty_winner_id)
   const canStart = game.status === 'agendado' && (isAdmin || helperIds.includes(profile.id))
   // jogo encerrado: mostra todos que jogaram (sem repetir); ao vivo: só quem está em campo
   const inField = (teamId) => {
-    if (game.status !== 'finalizado') return lineup.filter((l) => l.team_id === teamId && l.left_minute == null)
+    const kept = keptFor(teamId)
+    if (game.status !== 'finalizado') return lineup.filter((l) => l.team_id === teamId && l.left_minute == null && !kept.has(l.profile_id))
     const seen = new Set()
     return lineup.filter((l) => {
       const k = keyOf(l.profile_id, l.guest_id)
-      if (l.team_id !== teamId || seen.has(k)) return false
+      if (l.team_id !== teamId || seen.has(k) || kept.has(l.profile_id)) return false
       seen.add(k)
       return true
     })
+  }
+  // números do goleiro neste jogo: defesas difíceis e gols sofridos enquanto estava no gol
+  const keeperStats = (k) => {
+    const rival = k.team_id === game.team1_id ? game.team2_id : game.team1_id
+    const stints = keepers.filter((x) => x.team_id === k.team_id && x.profile_id === k.profile_id)
+    const inStint = (m) => stints.some((x) => m >= x.entered_minute && (x.left_minute == null || m < x.left_minute))
+    const conceded = events.filter((e) => ((e.type === 'gol' && e.team_id === rival) || (e.type === 'gol_contra' && e.team_id === k.team_id)) && inStint(e.minute)).length
+    const saves = events.filter((e) => e.type === 'defesa_dificil' && e.player_id === k.profile_id && e.team_id === k.team_id).length
+    return `${saves} DD · ${conceded} GS`
   }
   const statsOf = (l) => {
     const k = keyOf(l.profile_id, l.guest_id)
@@ -112,7 +130,7 @@ export default function Jogo() {
     const assists = events.filter((e) => e.type === 'gol' && (e.assist_id || e.assist_guest_id) && keyOf(e.assist_id, e.assist_guest_id) === k).length
     return `${goals}G · ${assists}A`
   }
-  const minuteNow = game.status === 'ao_vivo' ? Math.min(60, minuteOf(game, now)) : (events.at(-1)?.minute ?? GAME_MINUTES)
+  const minuteNow = game.status === 'ao_vivo' ? Math.min(60, minuteOf(game, now)) : (events.at(-1)?.minute ?? gameMinutes)
 
   async function rpc(fn, args, after) {
     setBusy(true)
@@ -138,12 +156,46 @@ export default function Jogo() {
     }
   }
 
+  // goleiro do time: toque para registrar (ao vivo) ou definir/trocar
+  const keeperBox = (team) => {
+    const k = team && currentKeeper(keepers, team.id)
+    if (k?.profile_id) {
+      return (
+        <button
+          disabled={!canRecord && !canSetKeeper}
+          onClick={() => setSheet(canRecord ? { kind: 'acao_gk', keeper: k } : { kind: 'goleiro', team })}
+          className="mb-1.5 flex w-full items-center gap-2 rounded-lg border border-gold/50 p-1.5 text-left disabled:opacity-100"
+        >
+          <Avatar name={name(k.profile_id)} src={photoUrl(photoOf[k.profile_id])} size={32} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 truncate text-sm">
+              <Hand size={13} className="flex-none text-gold" /> {name(k.profile_id)}
+            </div>
+            <div className="text-[11px] text-muted">{keeperStats(k)}</div>
+          </div>
+        </button>
+      )
+    }
+    return (
+      <button
+        disabled={!canSetKeeper}
+        onClick={() => setSheet({ kind: 'goleiro', team })}
+        className="mb-1.5 flex h-9 w-full items-center gap-1.5 rounded-lg border border-dashed border-line-2 px-2 text-left text-xs text-muted disabled:opacity-100"
+      >
+        <Hand size={13} className="flex-none text-gold" />
+        <span className="flex-1 truncate">{k ? 'Goleiro avulso' : 'Sem goleiro'}</span>
+        {canSetKeeper && <span className="font-semibold text-action">{k ? 'Trocar' : 'Definir'}</span>}
+      </button>
+    )
+  }
+
   const teamColumn = (team) => (
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-1.5 text-sm font-bold">
           <TeamShield team={team} size={20} />
           <span className="truncate">{team?.label}</span>
         </div>
+        {keeperBox(team)}
         {inField(team?.id).map((l) => (
           <button
             key={l.id}
@@ -169,7 +221,13 @@ export default function Jogo() {
 
   return (
     <div className="pb-6">
-      <div className="border-b border-line px-4 pt-2 pb-3 text-center">
+      <div className="border-b border-line px-4 pt-1 pb-3 text-center">
+        <button
+          className="-ml-2 flex h-10 items-center gap-0.5 pr-2 text-sm font-semibold text-action"
+          onClick={() => (window.history.state?.idx > 0 ? navigate(-1) : navigate(`/pelada/${pelada.id}`))}
+        >
+          <ChevronLeft size={20} /> Voltar
+        </button>
         <div className="text-xs text-muted">
           Jogo {game.number} ·{' '}
           <Link to={`/pelada/${pelada.id}`} className="font-semibold text-action">
@@ -189,7 +247,7 @@ export default function Jogo() {
             <span className="line-clamp-1 text-sm">{team2?.label}</span>
           </div>
         </div>
-        <div className={`mt-1 text-sm tabular-nums ${reachedEnd ? 'text-gold' : 'text-muted'}`}>{clock(game, now)}</div>
+        <div className={`mt-1 text-sm tabular-nums ${reachedEnd ? 'text-gold' : 'text-muted'}`}>{clock(game, now, gameMinutes, gameGoals)}</div>
         {tied && game.status === 'finalizado' && (
           <div className="mt-1 text-sm text-muted">
             {penaltyTeam ? `${penaltyTeam.label} venceu nos pênaltis` : 'Empate'}
@@ -206,6 +264,14 @@ export default function Jogo() {
         <div className="mx-4 mt-3 flex items-start gap-2 rounded-xl border border-line bg-surface p-3 text-sm text-muted">
           <Lock size={16} className="mt-0.5 flex-none" />
           <span>Admins e ajudantes desta pelada registram os eventos. Você acompanha ao vivo.</span>
+        </div>
+      )}
+
+      {game.status === 'finalizado' && (
+        <div className="px-4 pt-3">
+          <button className="btn w-full" onClick={() => navigate(`/pelada/${pelada.id}`)}>
+            Voltar para a pelada
+          </button>
         </div>
       )}
 
@@ -248,7 +314,7 @@ export default function Jogo() {
             </div>
             {isAdmin && (
               <>
-                {e.type !== 'substituicao' && (
+                {e.type !== 'substituicao' && e.type !== 'defesa_dificil' && (
                   <button className="flex h-10 w-10 items-center justify-center text-muted" aria-label="Editar" onClick={() => setSheet({ kind: 'edit', event: e })}>
                     <Pencil size={16} />
                   </button>
@@ -311,11 +377,65 @@ export default function Jogo() {
         </Sheet>
       )}
 
+      {sheet?.kind === 'acao_gk' && (
+        <Sheet
+          title={name(sheet.keeper.profile_id)}
+          subtitle={`Goleiro do ${sheet.keeper.team_id === team1?.id ? team1?.label : team2?.label} · ${keeperStats(sheet.keeper)}`}
+          onClose={() => setSheet(null)}
+        >
+          <div className="mb-2 text-sm font-semibold">O que aconteceu?</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Btn
+              className="col-span-2 border-gold bg-gold/15 text-gold"
+              disabled={busy}
+              onClick={() => record({ type: 'defesa_dificil', team_id: sheet.keeper.team_id, player_id: sheet.keeper.profile_id }, 'a defesa')}
+            >
+              <Hand size={16} className="mr-1 inline" /> Defesa difícil
+            </Btn>
+            <Btn onClick={() => setSheet({ kind: 'assist', person: { ...sheet.keeper, id: `gk-${sheet.keeper.id}`, guest_id: null }, keeper: sheet.keeper })}>Gol</Btn>
+            <Btn onClick={() => record({ type: 'gol_contra', team_id: sheet.keeper.team_id, player_id: sheet.keeper.profile_id }, 'o gol contra')}>Gol contra</Btn>
+          </div>
+          {canSetKeeper && (
+            <button
+              className="mt-3 flex min-h-12 w-full items-center border-b border-row text-left"
+              onClick={() => setSheet({ kind: 'goleiro', team: sheet.keeper.team_id === team1?.id ? team1 : team2 })}
+            >
+              Trocar goleiro
+            </button>
+          )}
+          <button className="mt-3 h-11 w-full text-sm text-muted" onClick={() => setSheet(null)}>
+            Cancelar
+          </button>
+        </Sheet>
+      )}
+
+      {sheet?.kind === 'goleiro' && (
+        <KeeperSheet
+          team={sheet.team}
+          game={game}
+          teams={[team1, team2]}
+          keepers={keepers}
+          lineup={lineup}
+          profiles={profiles}
+          goingIds={goingIds}
+          busy={busy}
+          msg={msg}
+          onClose={() => setSheet(null)}
+          onConfirm={(choice) =>
+            rpc('set_keeper', { p_game: game.id, p_team: sheet.team.id, p_profile: choice.profile_id ?? null, p_avulso: choice.avulso ?? false }, () => setSheet(null))
+          }
+        />
+      )}
+
       {sheet?.kind === 'assist' && (
         <Sheet title="Teve assistência?" subtitle={`Gol de ${name(sheet.person.profile_id, sheet.person.guest_id)} · passo 2 de 2`} onClose={() => setSheet(null)}>
           <div className="space-y-2">
-            {inField(sheet.person.team_id)
-              .filter((l) => l.id !== sheet.person.id)
+            {[
+              ...inField(sheet.person.team_id),
+              // o goleiro do time também dá assistência
+              ...[currentKeeper(keepers, sheet.person.team_id)].filter((k) => k?.profile_id).map((k) => ({ ...k, id: `gk-${k.id}`, guest_id: null })),
+            ]
+              .filter((l) => l.id !== sheet.person.id && !(l.profile_id && l.profile_id === sheet.person.profile_id))
               .map((l) => (
                 <Btn
                   key={l.id}
@@ -331,7 +451,10 @@ export default function Jogo() {
               Sem assistência
             </Btn>
           </div>
-          <button className="mt-3 h-11 w-full text-sm text-muted" onClick={() => setSheet({ kind: 'acao', person: sheet.person })}>
+          <button
+            className="mt-3 h-11 w-full text-sm text-muted"
+            onClick={() => setSheet(sheet.keeper ? { kind: 'acao_gk', keeper: sheet.keeper } : { kind: 'acao', person: sheet.person })}
+          >
             Voltar
           </button>
         </Sheet>
@@ -384,7 +507,7 @@ export default function Jogo() {
         <Sheet onClose={() => setSheet(null)}>
           <div className="text-center">
             <div className="text-xs font-semibold tracking-wide text-gold">
-              JOGO {game.number} {reachedEnd ? (Math.max(...score) >= GAME_GOALS ? 'ENCERRADO · CHEGOU A 2 GOLS' : 'ENCERRADO · 10 MINUTOS') : 'ENCERRAR'}
+              JOGO {game.number} {reachedEnd ? (Math.max(...score) >= gameGoals ? `ENCERRADO · CHEGOU A ${gameGoals} GOLS` : `ENCERRADO · ${gameMinutes} MINUTOS`) : 'ENCERRAR'}
             </div>
             <div className="mt-2 text-5xl font-bold tabular-nums">
               {score[0]} x {score[1]}
@@ -540,6 +663,59 @@ export default function Jogo() {
         />
       )}
     </div>
+  )
+}
+
+// Goleiro do time: goleiros que confirmaram presença, goleiro avulso ou sem goleiro.
+// Quem joga por um dos dois times deste jogo não aparece (senão fica duas vezes em campo).
+function KeeperSheet({ team, game, teams, keepers, lineup, profiles, goingIds, busy, msg, onClose, onConfirm }) {
+  const current = currentKeeper(keepers, team.id)
+  const rival = team.id === game.team1_id ? game.team2_id : game.team1_id
+  const playing = new Set([
+    ...teams.filter((t) => t && [game.team1_id, game.team2_id].includes(t.id)).flatMap((t) => t.active.map((m) => m.profile_id)),
+    ...lineup.filter((l) => l.left_minute == null).map((l) => l.profile_id),
+    ...keepers.filter((k) => k.team_id === rival && k.left_minute == null).map((k) => k.profile_id),
+  ])
+  const options = profiles.filter((p) => p.goalkeeper && goingIds.has(p.id) && !playing.has(p.id))
+  const [choice, setChoice] = useState(() =>
+    current ? (current.profile_id ? { key: current.profile_id, profile_id: current.profile_id } : { key: 'avulso', avulso: true }) : { key: 'nenhum' },
+  )
+
+  return (
+    <Sheet
+      title={`Goleiro do ${team.label}`}
+      subtitle={game.status === 'ao_vivo' ? 'A troca vale a partir de agora: os gols sofridos antes ficam com quem estava no gol.' : 'Vale para o jogo todo.'}
+      onClose={onClose}
+    >
+      <div className="max-h-[45dvh] overflow-y-auto">
+        {options.map((p) => (
+          <label key={p.id} className="flex min-h-12 items-center gap-3 border-b border-row">
+            <input type="radio" name="gk" className="h-5 w-5 accent-action" checked={choice.key === p.id} onChange={() => setChoice({ key: p.id, profile_id: p.id })} />
+            <span className="flex-1">{p.name}</span>
+            <span className="text-xs text-muted">{p.goalkeeper === 'so_goleiro' ? 'goleiro' : 'também goleiro'}</span>
+          </label>
+        ))}
+        {options.length === 0 && <div className="py-2 text-sm text-muted">Nenhum goleiro confirmado. O admin pode marcar a presença dele.</div>}
+        <label className="flex min-h-12 items-center gap-3 border-b border-row">
+          <input type="radio" name="gk" className="h-5 w-5 accent-action" checked={choice.key === 'avulso'} onChange={() => setChoice({ key: 'avulso', avulso: true })} />
+          <span className="flex-1">Goleiro avulso</span>
+          <span className="text-xs text-muted">sem estatística</span>
+        </label>
+        <label className="flex min-h-12 items-center gap-3">
+          <input type="radio" name="gk" className="h-5 w-5 accent-action" checked={choice.key === 'nenhum'} onChange={() => setChoice({ key: 'nenhum' })} />
+          <span className="flex-1">Sem goleiro</span>
+        </label>
+      </div>
+      <div className="mt-2">
+        <Notice>{msg}</Notice>
+      </div>
+      <button className="btn mt-3 w-full" disabled={busy} onClick={() => onConfirm(choice)}>
+        Confirmar
+      </button>
+      <button className="mt-2 h-11 w-full text-sm text-muted" onClick={onClose}>
+        Cancelar
+      </button>
+    </Sheet>
   )
 }
 

@@ -42,7 +42,8 @@ export async function fetchTeams(peladaId) {
       color: colorOf(t.color),
       members: list,
       active: list.filter((m) => !m.is_out),
-      label: kit?.name ?? (captain ? `Time de ${captain.name.split(' ')[0]}` : `Time ${t.captain_order}`),
+      // rodízio: times com nome próprio ("Time 3"), sem capitão
+      label: kit?.name ?? t.label ?? (captain ? `Time de ${captain.name.split(' ')[0]}` : `Time ${t.captain_order}`),
     }
   })
 }

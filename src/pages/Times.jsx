@@ -2,20 +2,21 @@ import { Clock, Lock, Shirt, Undo2, Users } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from '../components/Avatar'
+import { PositionTags } from '../components/Positions'
 import FillSlotSheet from '../components/FillSlotSheet'
+import InvertedDraft from '../components/InvertedDraft'
+import KeepersOfDay from '../components/KeepersOfDay'
 import Sheet from '../components/Sheet'
 import TeamCard from '../components/TeamCard'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
-import { DRAFT_ORDER } from '../lib/constants'
+import { teamForPick } from '../lib/constants'
 import { dayLabel, timeLabel, todayISO } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
 import { fetchCurrentPelada } from '../lib/peladas'
 import { photoUrl } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 import { fetchTeams } from '../lib/teams'
-
-const PICK_ORDER = DRAFT_ORDER.flat()
 
 function useNow(ms = 1000) {
   const [now, setNow] = useState(() => Date.now())
@@ -123,7 +124,7 @@ export default function Times() {
       const list = (ids ?? []).map((r) => r.profile_id)
       if (list.length) {
         const [{ data: people }, { data: ratings }, { data: pres }] = await Promise.all([
-          supabase.from('profiles').select('id, name, photo_path, type').in('id', list),
+          supabase.from('profiles').select('id, name, photo_path, type, positions').in('id', list),
           supabase.from('rating_summary').select('profile_id, overall').in('profile_id', list),
           supabase.from('presence').select('profile_id, answer').eq('pelada_id', p.id),
         ])
@@ -195,6 +196,21 @@ export default function Times() {
     </div>
   )
 
+  if (pelada.format === 'rodizio') {
+    return (
+      <div className="pb-6">
+        {header}
+        <div className="card mx-4 mt-3 text-sm">
+          <b>Pelada em rodízio</b>
+          <p className="mt-1 text-muted">Não há times fixos: quem chega entra na fila e os times saem na hora, jogo a jogo.</p>
+          <Link to="/pelada" className="btn mt-3 flex items-center justify-center">
+            Ver o rodízio
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   if (teams.length === 0) {
     return (
       <div className="pb-6">
@@ -221,7 +237,30 @@ export default function Times() {
   }
 
   const drafting = draft && draft.phase !== 'concluida'
-  const turnOrder = drafting ? PICK_ORDER[draft.next_pick - 1] : null
+
+  // capitães invertidos: cada mensalista escolhe o time (tela própria até fechar)
+  if (drafting && draft.mode === 'invertidos') {
+    return (
+      <div className="pb-6">
+        {header}
+        <InvertedDraft
+          pelada={pelada}
+          teams={teams}
+          draft={draft}
+          available={available}
+          profile={profile}
+          isAdmin={isAdmin}
+          countdown={countdown(deadline - now)}
+          onChanged={load}
+        />
+        <KeepersOfDay peladaId={pelada.id} />
+      </div>
+    )
+  }
+
+  const turnOrder = drafting ? teamForPick(draft) : null
+  const golden = draft?.mode === 'dourado'
+  const goldenTeam = golden ? teams.find((t) => t.captain_order === 1) : null
   const turnTeam = teams.find((t) => t.captain_order === turnOrder)
   const myTeam = teams.find((t) => t.captain_id === profile.id)
   const myTurn = drafting && turnTeam?.captain_id === profile.id
@@ -246,9 +285,17 @@ export default function Times() {
       {drafting && (
         <div className={`mx-4 mt-3 rounded-xl border p-3 ${myTurn ? 'border-action bg-action/10' : 'border-line'}`}>
           <div className="text-xs font-semibold tracking-wide text-muted">
-            4 CAPITÃES · ESCOLHA {Math.min(draft.next_pick, 16)} DE 16
+            {golden ? '🎟️ BILHETE DOURADO' : '4 CAPITÃES'} · ESCOLHA {Math.min(draft.next_pick, 16)} DE 16
           </div>
-          <div className="mt-0.5 text-lg font-bold">{myTurn ? 'Sua vez, capitão!' : `Vez de ${turnTeam?.captain?.name ?? '…'}`}</div>
+          <div className="mt-0.5 text-lg font-bold">
+            {golden && draft.next_pick <= 4
+              ? myTurn
+                ? `Seu bilhete dourado: escolha os seus 4 (faltam ${5 - draft.next_pick})`
+                : `${goldenTeam?.captain?.name ?? '…'} está montando o time dele`
+              : myTurn
+                ? 'Sua vez, capitão!'
+                : `Vez de ${turnTeam?.captain?.name ?? '…'}`}
+          </div>
           {myTurn && <div className="text-xs text-muted">Kit e cor também só agora: escolha antes do jogador, porque depois a vez passa.</div>}
           <div className="mt-1 flex items-center gap-1.5 text-sm text-muted">
             <Clock size={15} />
@@ -283,6 +330,10 @@ export default function Times() {
         </div>
       )}
 
+      {goldenTeam?.captain && !drafting && (
+        <div className="mx-4 mt-3 rounded-lg border border-gold/50 px-3 py-2 text-sm text-gold">🎟️ Bilhete dourado: {goldenTeam.captain.name} ({goldenTeam.label})</div>
+      )}
+
       <div className="grid grid-cols-2 gap-2 px-4 pt-3">
         {teams.map((t) => (
           <div key={t.id}>
@@ -296,6 +347,7 @@ export default function Times() {
           </div>
         ))}
       </div>
+      <KeepersOfDay peladaId={pelada.id} />
 
       {isAdmin && (
         <div className="flex gap-2 px-4 pt-3">
@@ -345,8 +397,9 @@ export default function Times() {
               <Avatar name={p.name} src={photoUrl(p.photo_path)} />
               <div className="min-w-0 flex-1">
                 <div className="truncate">{p.name}</div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <OverallStars value={p.overall} />
+                  <PositionTags positions={p.positions} />
                   <span className={`text-[11px] ${p.going ? 'text-[#7FD3A4]' : 'text-gold'}`}>{p.going ? 'vai' : 'dúvida'}</span>
                 </div>
               </div>
@@ -367,9 +420,11 @@ export default function Times() {
             </div>
           ))}
           <p className="px-4 pt-3 text-xs text-muted">
-            Ordem por rodada: 1-2-3-4 · 4-1-2-3 · 1-2-3-4 · 1-2-3-4. Primeiras 24 h livres; depois, 10 min por escolha. Sem
-            escolha, o app sorteia (primeiro entre quem confirmou). Kit e cor: só na sua vez de escolher. Os times valem só para esta
-            pelada.
+            {golden
+              ? `Bilhete dourado: ${goldenTeam?.captain?.name ?? 'o sorteado'} escolhe os 4 dele primeiro; ${draft.rest === 'sorteio' ? 'depois o app sorteia os outros 3 times' : 'depois os outros 3 capitães escolhem na ordem 2-3-4 · 4-2-3 · 2-3-4 · 2-3-4'}.`
+              : 'Ordem por rodada: 1-2-3-4 · 4-1-2-3 · 1-2-3-4 · 1-2-3-4.'}{' '}
+            Primeiras 24 h livres; depois, 10 min por escolha. Sem escolha, o app sorteia (primeiro entre quem confirmou). Kit e cor: só
+            na sua vez de escolher. Os times valem só para esta pelada.
           </p>
         </>
       )}

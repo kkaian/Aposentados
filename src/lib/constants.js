@@ -20,6 +20,12 @@ export const DRAFT_ORDER = [
   [1, 2, 3, 4],
 ]
 
+// Bilhete dourado: escolhas 1 a 4 do time 1; depois os outros 3 capitães (2-3-4 · 4-2-3 · 2-3-4 · 2-3-4)
+export const GOLDEN_ORDER = [1, 1, 1, 1, 2, 3, 4, 4, 2, 3, 2, 3, 4, 2, 3, 4]
+
+// Time (posição do capitão) que faz a escolha, conforme o modo da escolha (igual a draft_team_for_pick no banco)
+export const teamForPick = (draft, pick = draft?.next_pick) => (draft?.mode === 'dourado' ? GOLDEN_ORDER : DRAFT_ORDER.flat())[pick - 1]
+
 export const TIMEZONE = 'America/Sao_Paulo'
 
 // Supabase Auth exige e-mail: cada usuário recebe um e-mail interno derivado do nome de usuário

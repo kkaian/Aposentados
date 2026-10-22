@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import TeamShield from '../components/TeamShield'
 import { Notice, SectionLabel, Spinner } from '../components/ui'
 import { isAdminRole, useAuth } from '../lib/auth'
-import { DRAFT_ORDER, TEAM_COLORS } from '../lib/constants'
+import { TEAM_COLORS, teamForPick } from '../lib/constants'
 import { todayISO } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
 import { fetchCurrentPelada } from '../lib/peladas'
@@ -36,13 +36,13 @@ export default function MeuTime() {
         fetchTeams(pelada.id),
         supabase.from('kits').select('*').eq('active', true).order('name'),
         supabase.from('app_settings').select('kit_creation_enabled').single(),
-        supabase.from('drafts').select('phase, next_pick').eq('pelada_id', pelada.id).maybeSingle(),
+        supabase.from('drafts').select('phase, next_pick, mode').eq('pelada_id', pelada.id).maybeSingle(),
       ])
       const mine = teamId ? teams.find((t) => t.id === teamId) : teams.find((t) => t.captain_id === profile.id)
-      // durante a escolha, o capitão só mexe em kit e cor na vez dele
-      const drafting = draft && draft.phase !== 'concluida'
+      // durante a escolha, o capitão só mexe em kit e cor na vez dele (nos capitães invertidos, quando quiser)
+      const drafting = draft && draft.phase !== 'concluida' && draft.mode !== 'invertidos'
       const locked = drafting
-        ? (mine?.captain_id !== profile.id || DRAFT_ORDER.flat()[draft.next_pick - 1] !== mine?.captain_order) && 'turn'
+        ? (mine?.captain_id !== profile.id || teamForPick(draft) !== mine?.captain_order) && 'turn'
         : // depois da escolha: quem ficou sem kit ou cor completa até a véspera; admin ajusta sempre
           !isAdminRole(profile) && ((mine?.kit_id && mine?.color) ? 'done' : todayISO() >= pelada.date && 'late')
       setData({ teams, mine, kits: kits ?? [], creation: settings?.kit_creation_enabled, locked })

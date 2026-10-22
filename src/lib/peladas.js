@@ -34,7 +34,7 @@ export async function fetchCurrentPelada() {
 export async function fetchActivePlayers() {
   const { data } = await supabase
     .from('profiles')
-    .select('id, name, username, role, type, photo_path')
+    .select('id, name, username, role, type, photo_path, goalkeeper')
     .eq('status', 'ativo')
     .order('name')
   return data ?? []
