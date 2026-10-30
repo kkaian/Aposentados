@@ -66,11 +66,15 @@ function ChangeCaptainSheet({ team, onClose, onDone }) {
 
   return (
     <Sheet
-      title="Trocar capitão"
-      subtitle={`${team.label}. O time, as escolhas e o kit continuam; a vez do time passa a ser do novo capitão.`}
+      title={team.captain_id ? 'Trocar capitão' : 'Definir capitão'}
+      subtitle={
+        team.captain_id
+          ? `${team.label}. O time, as escolhas e o kit continuam; a vez do time passa a ser do novo capitão.`
+          : `${team.label}. O time continua igual; o capitão monta a estratégia e pode escolher kit e cor até a véspera.`
+      }
       onClose={onClose}
     >
-      {options.length === 0 && <div className="py-3 text-sm text-muted">Nenhum mensalista neste time além do capitão.</div>}
+      {options.length === 0 && <div className="py-3 text-sm text-muted">Nenhum mensalista neste time{team.captain_id ? ' além do capitão' : ''}.</div>}
       {options.map((m) => (
         <label key={m.id} className="flex min-h-12 items-center gap-3 border-b border-row">
           <input type="radio" name="new-captain" className="h-5 w-5 accent-action" checked={pick === m.profile_id} onChange={() => setPick(m.profile_id)} />
@@ -342,6 +346,8 @@ export default function Times() {
               <div className="flex justify-center gap-3 py-1.5 text-xs font-semibold text-action">
                 {!drafting && t.captain_id !== profile.id && <Link to={`/times/meu?time=${t.id}`}>Kit e cor</Link>}
                 {t.captain_id && pelada.status !== 'encerrada' && <button onClick={() => setChangeCaptain(t)}>Trocar capitão</button>}
+                {/* bilhete dourado com sorteio: os outros times nascem sem capitão */}
+                {!t.captain_id && golden && !drafting && pelada.status !== 'encerrada' && <button onClick={() => setChangeCaptain(t)}>Definir capitão</button>}
               </div>
             )}
           </div>

@@ -1,6 +1,6 @@
 # App do Aposentados FC — Especificação
 
-Documento de referência do app (atualizado em 14/10/2026, com tudo que foi decidido e implementado). Os wireframes originais (HTML) estão em `telas/` e o escudo em `escudo.jpeg`. Onde o texto e o desenho divergirem, **vale o texto** (ver seção 12).
+Documento de referência do app (atualizado em 30/10/2026, com tudo que foi decidido e implementado). Os wireframes originais (HTML) estão em `telas/` e o escudo em `escudo.jpeg`. Onde o texto e o desenho divergirem, **vale o texto** (ver seção 12).
 
 - **Site:** https://aposentados.vercel.app
 - **Código:** github.com/kkaian/Aposentados (público)
@@ -14,7 +14,7 @@ Site instalável (PWA) para a pelada: registra jogos, gols, assistências e cart
 - **Front:** React + Vite + Tailwind + `vite-plugin-pwa`. Ícones: `lucide-react`. Fonte Barlow.
 - **Back:** Supabase no plano gratuito (Postgres, Auth, Storage, RLS, Realtime e `pg_cron`). Sem servidor próprio: as regras ficam no banco (constraints, triggers e funções RPC).
 - **Hospedagem:** Vercel, que publica sozinha cada push na `main`. O endereço e a chave pública (`publishable`) do Supabase ficam em `src/lib/supabase.js`; a proteção dos dados é o RLS.
-- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (133 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
+- **Banco versionado:** migrações em `supabase/migrations/`. `npm run db:migrate` aplica as novas e `npm run db:test` roda os testes de regras e permissões (224 casos, numa transação desfeita no final; `-- --with=arquivo.sql` ensaia uma migração nova antes de aplicar). A senha do banco fica só no `.env.local`, fora do git.
 - **Login:** só usuário + senha (sem Google). O Supabase usa um e-mail interno `usuario@aposentados.app`; a confirmação de e-mail fica desligada.
 - **Fotos e escudos:** reduzidos no celular antes de enviar (foto ~100 KB, escudo ~60 KB). Trocar a foto substitui a antiga. Limite de 200 KB por arquivo.
 - **Instalação:** item "Instalar app" no menu. No Android abre o aviso do Chrome (`beforeinstallprompt`); no iPhone mostra as instruções do Safari. O item some quando o app já está instalado. O app se atualiza sozinho (às vezes é preciso fechar e abrir).
@@ -91,6 +91,18 @@ Vou/Não vou, atualizando ao vivo. Marcam presença os mensalistas e os diarista
 10. **Desfazer a última escolha (admin):** o jogador escolhido (ou a vaga) sai e a vez volta para o capitão (nos turnos, com 10 min de novo). Vale também depois de a escolha terminar, até o horário da pelada e antes do primeiro jogo.
 11. **Editar os times (admin, fora da escolha dos capitães, até depois de encerrada a pelada):** tocando no jogador: trocar por outra pessoa (corrige vaga preenchida errada), mudar de time, tirar do time (vira vaga) e corrigir o nome do avulso. No card do time: "+ Adicionar" (pessoa ou vaga vazia), "Desfazer" em quem saiu (volta ao time e quem entrou no lugar sai) e "Excluir vaga". Capitão não sai nem muda de time (use Trocar capitão).
 
+### Outros modos de montar os times
+
+- **Capitães invertidos:** por 24 h, cada mensalista escolhe em qual dos 4 capitães quer jogar. Time com mais de 4 interessados: o capitão corta (sem cortar, corte aleatório); o cortado escolhe outro time dentro das 24 h e, depois disso, vai para onde falta gente. O admin pode fechar antes; diarista completa o que faltar.
+- **Bilhete dourado:** um mensalista, sorteado ou escolhido pelo admin, escolhe os seus 4 de uma vez. Os outros 3 times saem por sorteio ou por 3 capitães em turnos (2-3-4 · 4-2-3 · 2-3-4 · 2-3-4). No sorteio, o admin pode definir depois o capitão de cada time, para ele montar a estratégia.
+- **Rodízio (formato da pelada):** quem chega entra na fila, 5 por time, 10 min ou 2 gols (métrica editável por pelada), quem ganha fica. Admin ou ajudante monta o próximo time ou sorteia, priorizando quem está há mais jogos sem jogar. O formato pode ser trocado até o 1º jogo, o que apaga os times.
+
+### Funções, goleiro e estratégia
+
+- **Funções:** cada jogador marca uma ou mais (Atacante, Meio-campista, Defensor, com variações); aparecem no perfil e na miniatura.
+- **Goleiro:** o admin dá o papel. "Só goleiro" fica fora da escolha dos times, das vagas, do pódio, dos troféus e da mensalidade; só confirma presença e aparece nos goleiros do dia. Antes de cada partida se define para qual time ele agarra (quem está num dos dois times do jogo não pode). Gols sofridos são de quem estava no gol na hora; "Defesa difícil" é um evento. Mensalista que também é goleiro: o jogo em que agarrou conta como de goleiro, e o perfil alterna os dois números. Notas de goleiro: mãos, pés, alcance, salto e overall.
+- **Estratégia:** o capitão monta formação (sempre 5 em campo), posições e até 5 instruções de 80 caracteres, até a pelada acabar. Só o próprio time vê. O jogador confirma "entendi" ou pede troca com um colega, e o capitão aceita ou recusa. Quem substitui herda a posição. Ao encerrar a pelada, a estratégia é apagada.
+
 ### No dia da pelada
 
 - **Preencher vaga** (admin ou ajudante): avulso, diarista com conta ou mensalista de última hora. Opção "pagou para jogar" (valor e quem recebeu) vai para o caixa. Vaga não preenchida não entra em campo.
@@ -118,7 +130,7 @@ Abas Total, Vitórias, Gols e Assistências. Total = gols + assistências. Desem
 
 ### Troféus do mês
 
-Aparecem no perfil a partir do dia 1º do mês seguinte, calculados na hora (correções de eventos ajustam os troféus). Só quem era mensalista naquele mês (o app guarda os períodos de mensalista, desde 01/10/2026). Sem troféu: "Sem troféus ainda".
+O mês fecha depois do seu último domingo: os troféus aparecem no perfil e no Histórico (com os dados e o ranking do mês) a partir da segunda-feira. São calculados na hora, então correções de eventos ou outra pelada encerrada no mesmo mês atualizam os números e os premiados. Só quem era mensalista naquele mês (o app guarda os períodos de mensalista, desde 01/10/2026). Sem troféu: "Sem troféus ainda".
 - **Melhor do mês** (🏆 🥈 🥉): gols + assistências, desempate por vitórias. 1º, 2º e 3º.
 - **Artilheiro** (⚽), **Garçom** (🎯) e **Mais vitórias** (💪): só o 1º; empate premia todos.
 - **Seleção do mês** (⭐): o time com mais vitórias numa pelada do mês; desempate por gols; empate de novo, os dois levam. Ganham os mensalistas do time naquela pelada (quem saiu em troca integral ou foi só emprestado não leva).
@@ -179,7 +191,7 @@ Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. i
 | Times da pelada | `/times` | logados | escolha ao vivo, prazos, disponíveis, vaga de diarista |
 | Meu time | `/times/meu` | capitão/admin | kit e cor; criar ou sugerir kit |
 | Jogo | `/jogo/:id` | logados | placar, cronômetro, eventos, emprestar; detalhe depois de encerrado |
-| Histórico | `/historico` | logados | peladas por mês, filtro de jogador |
+| Histórico | `/historico` | logados | peladas por mês, dados e premiados do mês fechado; filtro de jogador com vitórias, gols e assistências em cada pelada e no mês |
 | Avaliar colegas / jogador | `/notas`, `/notas/:id` | mensalistas | lista com estrelas; votação por jogador |
 | Pagamentos | `/pagamentos` | logados | cobranças em aberto e pagas; parte do admin |
 | Administração | `/admin` | admin | atalhos com pendências |
@@ -193,7 +205,7 @@ Ativadas por aparelho (perfil ou convite na tela de Início). Android: Chrome. i
 | Encerrar pelada | `/admin/encerrar/:id` | admin | resumo do dia |
 | Caixa | `/admin/caixa` | admin | entradas, gastos, repasses, com quem está o dinheiro |
 | Nomes e escudos | `/admin/kits` | admin | kits, criação pelos capitães, sugestões |
-| Exportar dados | `/admin/exportar` | admin | CSVs |
+| Exportar dados | `/admin/exportar` | admin | CSVs; "Mês completo" junta tudo de um mês num arquivo só (sem os votos das notas, que são anônimos) |
 
 ## 7. Modelo de dados
 
@@ -252,6 +264,8 @@ Ideias para depois:
 - Pelada de 04/10/2026 (feita no papel) lançada direto no banco.
 - 14/10/2026 (depois da pelada de 11/10): tudo que não tinha volta ganhou opção. Excluir pelada e jogo só o dono, digitando "aposentados fc"; excluir pelada estorna o dinheiro de diarista dela. Montar times na mão: dono e admins. "Faltou" tira dos jogos quem não foi (aplicado na pelada de 11/10). Também: editar times, desfazer última escolha, reabrir pelada, desativar/renomear jogador, aprovar recusado, desfazer "Já paguei", editar/excluir cobrança.
 - Pódio e troféus de cada mês ficam com quem era mensalista naquele mês: virar diarista ou ser desativado não apaga os títulos (14/10/2026).
+- O mês fecha depois do último domingo e o Histórico mostra os dados e os premiados; outra pelada no mesmo mês atualiza tudo (30/10/2026).
+- Bilhete dourado com sorteio: o admin pode definir o capitão de cada time sorteado, para ele montar a estratégia (30/10/2026).
 
 ## 12. Onde os wireframes estão desatualizados
 

@@ -23,7 +23,7 @@ const HOW = {
   invertidos:
     'Por 24 h, cada mensalista (menos quem disse que não vai) escolhe o time do capitão em que quer jogar e pode trocar. Time com mais de 4 interessados: o capitão corta quem fica fora; sem cortar até o fim, o app sorteia. Quem foi cortado escolhe outro time dentro das 24 h. No fim, quem sobrou vai para onde falta gente (mensalistas antes dos diaristas chamados) e o que faltar vira vaga de diarista. Kit e cor: cada capitão escolhe quando quiser, até a véspera. Você pode fechar os times antes.',
   dourado:
-    'O dono do bilhete monta o time dele primeiro: escolhe os 4 de uma vez (24 h livres; depois, 10 min por escolha ou o app sorteia). Os outros 3 times saem no sorteio logo depois, ou 3 capitães escolhem na ordem 2-3-4 · 4-2-3 · 2-3-4 · 2-3-4. Diarista só entra se faltar mensalista.',
+    'O dono do bilhete monta o time dele primeiro: escolhe os 4 de uma vez (24 h livres; depois, 10 min por escolha ou o app sorteia). Os outros 3 times saem no sorteio logo depois, ou 3 capitães escolhem na ordem 2-3-4 · 4-2-3 · 2-3-4 · 2-3-4. No sorteio, você pode definir depois o capitão de cada time em Times da pelada, para ele montar a estratégia. Diarista só entra se faltar mensalista.',
 }
 
 export default function DefinirCapitaes() {

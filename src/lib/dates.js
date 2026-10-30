@@ -13,6 +13,16 @@ export function addMonths(monthIso, n) {
   return d.toISOString().slice(0, 10)
 }
 
+// Último domingo do mês: depois dele o mês está fechado (igual a public.month_close_date)
+export function lastSunday(monthIso) {
+  const [y, m] = monthIso.split('-').map(Number)
+  const last = new Date(Date.UTC(y, m, 0))
+  last.setUTCDate(last.getUTCDate() - last.getUTCDay())
+  return last.toISOString().slice(0, 10)
+}
+
+export const monthClosed = (monthIso) => todayISO() > lastSunday(monthIso)
+
 const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 

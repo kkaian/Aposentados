@@ -7,6 +7,7 @@ import { GK_RATING_FIELDS } from '../lib/positions'
 import { PushSetting } from '../components/PushControls'
 import { Notice, Segmented, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
+import { AWARDS } from '../lib/awards'
 import { addMonths, monthLabel, monthName, monthStart, todayISO } from '../lib/dates'
 import { friendlyError } from '../lib/errors'
 import { photoUrl, uploadAvatar } from '../lib/storage'
@@ -148,14 +149,6 @@ function RatingsBlock({ profileId, view = 'rating_summary', rows = RATING_ROWS, 
       )}
     </div>
   )
-}
-
-const AWARDS = {
-  melhor_mes: { icon: ['🏆', '🥈', '🥉'], label: (pos) => `Melhor do mês · ${pos}º lugar` },
-  artilheiro: { icon: ['⚽'], label: () => 'Artilheiro do mês' },
-  garcom: { icon: ['🎯'], label: () => 'Garçom do mês' },
-  mais_vitorias: { icon: ['💪'], label: () => 'Mais vitórias do mês' },
-  selecao: { icon: ['⭐'], label: () => 'Seleção do mês' },
 }
 
 function TrophiesBlock({ profileId }) {

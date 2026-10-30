@@ -127,10 +127,22 @@ try {
   })
   await expect('j7 (entrou na substituição, time perdeu) sem vitória', async () => JSON.stringify(await one(`select games, wins from player_month_stats where profile_id=$1`, [id('j7')])))
 
+  await expect('estatística por pelada soma o mesmo que a do mês', async () => {
+    const r = await one(`select count(*)::int n from (select profile_id, sum(games)::int g, sum(wins)::int w, sum(goals)::int go, sum(assists)::int a from player_pelada_stats where pelada_id = $1 group by 1) x
+      full join (select * from player_month_stats where profile_id = any ($2)) m using (profile_id)
+      where x.profile_id = any ($2) and (x.g, x.w, x.go, x.a) is distinct from (m.games, m.wins, m.goals, m.assists)`, [pel, [id('j2'), id('j7')]])
+    if (r.n) throw new Error(`${r.n} jogador(es) com números diferentes`)
+    return 'iguais'
+  })
+  await expect('o mês fecha no último domingo', async () => {
+    const r = await one(`select month_close_date('2026-10-01')::text a, month_close_date('2026-11-01')::text b, month_close_date('2026-05-01')::text c, month_closed('2026-09-01') d, month_closed('2099-01-01') e`)
+    if (r.a !== '2026-10-25' || r.b !== '2026-11-29' || r.c !== '2026-05-31' || !r.d || r.e) throw new Error(JSON.stringify(r))
+    return 'out 25, nov 29, mai 31'
+  })
   await expect('troféus só saem quando o mês fecha', async () => {
-    const r = await one(`select count(*)::int n from awards where month = current_month()`)
-    if (r.n) throw new Error(`${r.n} troféus no mês atual`)
-    return 'nenhum no mês atual'
+    const r = await one(`select count(*)::int n from awards where not month_closed(month)`)
+    if (r.n) throw new Error(`${r.n} troféus em mês aberto`)
+    return 'nenhum em mês aberto'
   })
   await expect('troféus do mês fechado', async () => {
     await as(null)
@@ -140,6 +152,19 @@ try {
     await as(id('adm'))
     const r = await q(`select a.award, a.position, p.name from awards a join profiles p on p.id = a.profile_id where a.month = '2026-09-01' order by a.award, a.position, p.name`)
     return '\n' + r.rows.map((x) => `   ${x.award} ${x.position}o: ${x.name}`).join('\n')
+  })
+  await expect('pelada depois do último domingo ainda entra nos premiados do mês', async () => {
+    const count = async () => (await one(`select count(*)::int n from awards where month = '2026-09-01'`)).n
+    const before = await count()
+    await as(null)
+    await q(`update peladas set date = '2026-09-30' where id = $1`, [pel])
+    await as(id('adm'))
+    const after = await count()
+    await as(null)
+    await q(`update peladas set date = '2026-09-13' where id = $1`, [pel])
+    await as(id('adm'))
+    if (!before || before !== after) throw new Error(JSON.stringify({ before, after }))
+    return `${after} troféus`
   })
   await expect('quem vira diarista ou é desativado continua no pódio e nos troféus dos meses em que foi mensalista', async () => {
     await as(id('adm'))
@@ -871,6 +896,24 @@ try {
     if (d.phase !== 'concluida' || sizes.some((n) => n !== 5)) throw new Error(`fase=${d.phase} tamanhos=${sizes}`)
     if (!goldPool.slice(0, 4).every((p) => mine.includes(p))) throw new Error('escolhas do bilhete fora do time 1')
     return `tamanhos ${sizes.join(',')}`
+  })
+  // times do sorteio nascem sem capitão: o admin define, para ter quem monte a estratégia
+  const noCaptain = await one(`select m.team_id, m.profile_id, m.id as member from team_members m join teams t on t.id = m.team_id join profiles p on p.id = m.profile_id
+    where m.pelada_id = $1 and t.captain_id is null and p.type = 'mensalista' and not m.is_out limit 1`, [pgd])
+  // o sorteio pode pegar a conta de teste que é admin: o jogador comum é sempre j6
+  await expect('jogador comum não define capitão', async () => { await as(id('j6')); return q(`select change_captain($1,$2)`, [noCaptain.team_id, noCaptain.profile_id]) }, true)
+  await expect('capitão definido precisa estar no time', async () => { await as(id('adm')); return q(`select change_captain($1,$2)`, [noCaptain.team_id, id('j5')]) }, true)
+  await expect('admin define o capitão de um time do sorteio', async () => {
+    await as(id('adm'))
+    await q(`select change_captain($1,$2)`, [noCaptain.team_id, noCaptain.profile_id])
+    const t = await one(`select captain_id, (select is_captain from team_members where id = $2) flag from teams where id = $1`, [noCaptain.team_id, noCaptain.member])
+    if (t.captain_id !== noCaptain.profile_id || !t.flag) throw new Error(JSON.stringify(t))
+    return 'capitão definido'
+  })
+  await expect('o capitão definido é avisado para montar a estratégia', async () => ((await pushedTo('Você é capitão!')).includes(noCaptain.profile_id) ? 'avisado' : Promise.reject(new Error('sem aviso'))))
+  await expect('o capitão definido monta a estratégia', async () => {
+    await as(noCaptain.profile_id)
+    return q(`select save_tactic($1,'2-1-2',array[$2::bigint,null,null,null,null],array['Marcar alto'])`, [noCaptain.team_id, noCaptain.member])
   })
 
   // bilhete dourado com capitães: sorteado; capitães j1, j2, j3 escolhem na ordem 2-3-4 · 4-2-3

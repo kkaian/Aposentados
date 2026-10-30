@@ -1,27 +1,35 @@
-import { Download } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { useState } from 'react'
 import { AdminBadge, Notice } from '../../components/ui'
+import { addMonths, monthLabel, monthStart, todayISO } from '../../lib/dates'
 import { friendlyError } from '../../lib/errors'
+import { buildMonthExport } from '../../lib/monthExport'
 import { supabase } from '../../lib/supabase'
 
-// CSV com ";" (abre direto no Excel em português) e BOM para os acentos
-function toCSV(rows) {
-  if (!rows.length) return ''
-  const cols = Object.keys(rows[0])
-  const esc = (v) => {
-    if (v == null) return ''
-    const s = typeof v === 'object' ? JSON.stringify(v) : String(v)
-    return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  return '﻿' + [cols.join(';'), ...rows.map((r) => cols.map((c) => esc(r[c])).join(';'))].join('\n')
+const esc = (v) => {
+  if (v == null) return ''
+  const s = typeof v === 'object' ? JSON.stringify(v) : String(v)
+  return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-function download(name, rows) {
-  const blob = new Blob([toCSV(rows)], { type: 'text/csv;charset=utf-8' })
+function table(rows) {
+  const cols = Object.keys(rows[0])
+  return [cols.join(';'), ...rows.map((r) => cols.map((c) => esc(r[c])).join(';'))]
+}
+
+// CSV com ";" (abre direto no Excel em português) e BOM para os acentos
+const toCSV = (rows) => '﻿' + table(rows).join('\n')
+
+// Várias tabelas no mesmo arquivo, cada uma com o título numa linha e uma linha em branco entre elas
+const sectionsToCSV = (sections) =>
+  '﻿' + sections.flatMap(([title, rows]) => [esc(title.toUpperCase()), ...(rows.length ? table(rows) : ['Sem dados']), '']).join('\n')
+
+function download(filename, csv) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `aposentados-${name}-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -68,6 +76,7 @@ const EXPORTS = [
 export default function Exportar() {
   const [busy, setBusy] = useState(null)
   const [msg, setMsg] = useState({})
+  const [month, setMonth] = useState(monthStart(todayISO()))
 
   async function run(key, label, fn) {
     setBusy(key)
@@ -75,7 +84,20 @@ export default function Exportar() {
     try {
       const rows = await fn()
       if (!rows.length) setMsg({ error: `${label}: nada para exportar ainda.` })
-      else download(key, rows)
+      else download(`aposentados-${key}-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
+    } catch (err) {
+      setMsg({ error: friendlyError(err) })
+    }
+    setBusy(null)
+  }
+
+  async function runMonth() {
+    setBusy('mes')
+    setMsg({})
+    try {
+      const { sections, hasData } = await buildMonthExport(month)
+      if (!hasData) setMsg({ error: `${monthLabel(month)}: nada para exportar.` })
+      else download(`aposentados-mes-${month.slice(0, 7)}.csv`, sectionsToCSV(sections))
     } catch (err) {
       setMsg({ error: friendlyError(err) })
     }
@@ -88,6 +110,22 @@ export default function Exportar() {
         <AdminBadge />
       </div>
       <p className="px-4 pt-1 text-sm text-muted">Planilhas CSV que abrem no Excel ou no Google Planilhas. Além disso, um backup completo é feito sozinho a cada 3 dias.</p>
+      <div className="card mx-4 mt-4">
+        <b>Mês completo</b>
+        <p className="text-xs text-muted">Tudo do mês num arquivo só: resumo, premiados, estatísticas, peladas, presença, times, jogos, eventos, pagamentos e caixa.</p>
+        <div className="mt-2 flex items-center">
+          <button className="flex h-11 w-11 items-center justify-center" aria-label="Mês anterior" onClick={() => setMonth(addMonths(month, -1))}>
+            <ChevronLeft size={22} />
+          </button>
+          <b className="flex-1 text-center">{monthLabel(month)}</b>
+          <button className="flex h-11 w-11 items-center justify-center disabled:opacity-30" aria-label="Próximo mês" disabled={month >= monthStart(todayISO())} onClick={() => setMonth(addMonths(month, 1))}>
+            <ChevronRight size={22} />
+          </button>
+        </div>
+        <button className="btn mt-2 flex w-full items-center justify-center gap-2" disabled={busy !== null} onClick={runMonth}>
+          <Download size={18} /> {busy === 'mes' ? 'Gerando…' : 'Baixar o mês'}
+        </button>
+      </div>
       <div className="space-y-2 px-4 pt-4">
         {EXPORTS.map(([key, label, fn]) => (
           <button key={key} className="btn-ghost flex h-12 w-full items-center gap-3 text-left" disabled={busy !== null} onClick={() => run(key, label, fn)}>
