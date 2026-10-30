@@ -5,13 +5,6 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { connect } from './db.mjs'
 
-const TABLES = [
-  'profiles', 'invites', 'password_requests', 'app_settings', 'kits', 'kit_suggestions',
-  'peladas', 'pelada_helpers', 'pelada_diaristas', 'guests', 'presence',
-  'teams', 'team_members', 'drafts', 'games', 'game_lineup', 'game_events',
-  'ratings', 'charges', 'payments', 'cash_entries', 'mensalista_periods',
-]
-
 const esc = (v) => {
   if (v == null) return ''
   const s = v instanceof Date ? v.toISOString() : typeof v === 'object' ? JSON.stringify(v) : String(v)
@@ -22,9 +15,11 @@ const dir = join(import.meta.dirname, '..', 'backup', new Date().toISOString().s
 mkdirSync(dir, { recursive: true })
 
 const db = await connect()
+// Todas as tabelas do schema public, lidas do banco: tabela nova entra sozinha no backup
+const { rows: tables } = await db.query(`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by table_name`)
 let total = 0
-for (const table of TABLES) {
-  const { rows, fields } = await db.query(`select * from public.${table}`)
+for (const { table_name: table } of tables) {
+  const { rows, fields } = await db.query(`select * from public."${table}"`)
   const cols = fields.map((f) => f.name)
   writeFileSync(join(dir, `${table}.csv`), [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n'))
   total += rows.length
