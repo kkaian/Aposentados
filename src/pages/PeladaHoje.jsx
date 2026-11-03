@@ -41,10 +41,13 @@ function NextGameSheet({ pelada, teams, games, onClose, onDone }) {
           key={t.id}
           disabled={t.id === other}
           onClick={() => onPick(t.id)}
-          className={`flex h-12 items-center gap-2 rounded-lg border px-2 text-left text-sm disabled:opacity-30 ${value === t.id ? 'border-action bg-action/15' : 'border-line-2'}`}
+          className={`flex min-h-12 items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-sm disabled:opacity-30 ${value === t.id ? 'border-action bg-action/15' : 'border-line-2'}`}
         >
           <TeamShield team={t} size={24} />
-          <span className="truncate">{t.label}</span>
+          <span className="min-w-0">
+            <span className="block truncate">{t.label}</span>
+            {t.captain && <span className="block truncate text-[11px] text-muted">Cap. {t.captain.name}</span>}
+          </span>
         </button>
       ))}
     </div>
